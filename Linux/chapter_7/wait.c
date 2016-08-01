@@ -37,16 +37,18 @@ int main(int argc,char *argv[])
 	if(pid != 0){
 		int stat_var;
 		pid_t child_pid;
+
 		child_pid = wait(&stat_var);
 		printf("child process has exited,pid = %d\n",child_pid);
 		if(WIFEXITED(stat_var)){
 			printf("child exited with code %d\n", WEXITSTATUS(stat_var));
 
-		}else{
+		}
+		else{
 			printf("child exited abnormally\n");
 		}
-
-	}else{
+	}
+	else{
 		while(k-- >0){
 			puts(msg);
 			sleep(1);

@@ -1,4 +1,4 @@
-/*************************************************************************
+	/*************************************************************************
 	> File Name: meshell.c
 	> Author:chudongfang 
 	> Mail:1149669942@qq.com 
@@ -15,6 +15,8 @@
 #include <stdio.h>
 #include <string.h>
 #include <math.h>
+#include <readline/readline.h>
+#include <readline/history.h>
 #include <stdlib.h>
 #define  MAX_SIZE 256
 
@@ -52,6 +54,8 @@ int main(int argc,char *argv[])
 		exit(-1);
 	}
 	
+
+
 	while(1){
 		memset(buf,0,256);
 		memset(path,0,MAX_SIZE);
@@ -125,14 +129,35 @@ void print_prompt(char *path)
 
 void get_input(char *buf)
 {
+    char  *temp;
+    char  word[256];
 	int len = 0;
+    int len1=0;
 	int ch;
-	ch = getchar();
-	while(len < 256 && ch != '\n'){
-		buf[len++] = ch;
-		ch = getchar();
-	}
+    temp = (char* )malloc(sizeof(256));
+    memset(temp,0,sizeof(temp));
+	/*while(len < 256 && ch != '\n'){
+		
+        word[len1++] = ch;
+        buf[len++] = ch;
 	
+        if(ch == ' '){
+            memset(word,0,sizeof(word));
+            len1=0;
+        }
+        ch = getchar();
+        if(ch == 0x9){
+            temp=readline(word);
+            puts(temp);
+        }
+
+	}*/
+    temp = readline("please input:");
+    puts(temp);
+
+    free(temp);
+
+
 	if(len == 256){
 		printf("command is too long \n");
 		exit(-1);
@@ -300,8 +325,6 @@ void do_cmd(int argcout,char arglist[100][256])
 			execvp(arg[0],arg);
 			exit(0);
 		}
-		else 
-			sleep(1);
 		break;
 		
 
@@ -373,7 +396,17 @@ void do_cmd(int argcout,char arglist[100][256])
 		break;
 	}
 	
-	loop: ; 
+    if(backgroud == 1){
+        printf("[process id %d]\n",pid);
+        return ;
+    }
+
+    if(waitpid(pid,&status,0) == -1){
+        printf("wait for child process error!\n");
+    }
+
+	loop: ;
+
 }
 
 
