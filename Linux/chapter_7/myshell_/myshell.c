@@ -437,8 +437,11 @@ void do_cmd(int argcout,char arglist[100][256],int his_count,char history[][256]
         exit(0);
     }
 
-/************************父进程等待子进程退出******************************/    
+    if(backgroud == 1 && pid)
+        goto loop;
 
+/************************父进程等待子进程退出******************************/    
+    
     if(waitpid(pid,&status,0) == -1){
         printf("wait for child process error!\n");
     }
