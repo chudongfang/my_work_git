@@ -1,13 +1,16 @@
+#include <mysql/mysql.h> 
 #include <gtk/gtk.h>
 #include <stdio.h>
 #include <pthread.h>
 #include <sys/socket.h>
+#include <sys/epoll.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <string.h>
 #include <signal.h>
+#include <time.h>
 
 #define LOGIN      1
 #define REGISTER   2
@@ -67,7 +70,7 @@ int sockfd;
 char *IP = "127.0.0.1";
 short PORT = 10222;
 typedef struct sockaddr SA;
-
+pthread_mutex_t  mutex;
 
 STAT m_status;
 
@@ -89,7 +92,6 @@ int  m_send_num;
 
 
 /*****************recv*********************/
-PACK m_pack_recv_login      [MAX_CHAR];
 PACK m_pack_recv_friend_see [MAX_CHAR];
 PACK m_pack_recv_chat_one   [MAX_CHAR];
 PACK m_pack_recv_chat_many  [MAX_CHAR];
@@ -139,7 +141,7 @@ void sig_close(int i)
 
 
 
-
+/*************************login************************************/
 int send_login(char username_t[],char password_t[])
 {
     PACK send_login_t;
@@ -149,7 +151,6 @@ int send_login(char username_t[],char password_t[])
     strcpy(send_login_t.data.send_name,username_t);
     strcpy(send_login_t.data.recv_name,"server");
     strcpy(send_login_t.data.mes,password_t); 
-
     if(send(sockfd,&send_login_t,sizeof(PACK),0) < 0){
         my_err("send",__LINE__);
     }
@@ -202,7 +203,8 @@ int login_menu()
         switch(chioce)
         {  
             case 1:
-                login();
+                if(login() == 1)
+                    return 1;
                 break;
             case 2:
                 registe();
@@ -213,13 +215,17 @@ int login_menu()
     }while(chioce!=0);
     return 0;
 }
+/*******************************************************/
 
 
+
+
+/**************************registe******************************/
 
 int send_registe(char username_t[],char password_t[])
 {
-    PACK send_registe_t;
-    
+    PACK send_registe_t,recv_registe_t;
+    int send_registe_flag;
     send_registe_t.type = REGISTER;
     strcpy(send_registe_t.data.send_name,username_t);
     strcpy(send_registe_t.data.recv_name,"server");
@@ -227,7 +233,12 @@ int send_registe(char username_t[],char password_t[])
     if(send(sockfd,&send_registe_t,sizeof(PACK),0) < 0){
         my_err("send",__LINE__);
     }
-    return 1;
+
+    if(recv(sockfd,&recv_registe_t,sizeof(PACK),0) < 0){
+        my_err("recv",__LINE__);
+    }
+    send_registe_flag = recv_registe_t.data.mes[0] - 48;
+    return send_registe_flag;
 }
 
 void registe()
@@ -246,7 +257,84 @@ void registe()
     if(send_registe(username_t,password_t))
         printf("registe successfully!\n");
     else 
-        printf("registe failed!\n");
+        printf("the name is used ,please input another one\n");
+}
+
+
+/************************************************************/
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+/*void *clien_send_thread(void *arg)
+{
+    int i;
+    while(1)
+    {
+        for(i=0;i<m_send_num;i++)
+        {
+            if(send(sockfd,m_pack_send+i,sizeof(PACK),0) < 0){
+               my_err("send",__LINE__);
+            }
+        }
+        sleep(1);
+    }
+}*/
+
+
+
+void *clien_recv_thread(void *arg)
+{
+    int i;
+    PACK pack_t;
+    while(1)
+    {
+        if(recv(sockfd,&pack_t,sizeof(PACK),0) < 0){
+            my_err("recv",__LINE__);
+        }
+        pthread_mutex_lock(&mutex); 
+        switch(pack_t.type)
+        {
+            case LOGIN:
+                //m_pack_recv_login[m_recv_num_login++] = pack_t;
+                break;
+            case FRIEND_SEE:
+                m_pack_recv_friend_see[m_recv_num_friend_see++] = pack_t;
+                break;
+            case CHAT_ONE:
+                m_pack_recv_chat_one[m_recv_num_chat_one++] = pack_t;
+                break;
+            case CHAT_MANY:
+                m_pack_recv_chat_many[m_recv_num_chat_many++] = pack_t;
+                break;
+            case SEND_FILE:
+                m_pack_recv_send_file[m_recv_num_send_file++] = pack_t;
+                break;
+        }
+        pthread_mutex_unlock(&mutex);  
+    }
 }
 
 
@@ -254,23 +342,12 @@ void registe()
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+void init_clien_pthread()
+{
+    pthread_t pid_send,pid_recv;
+   // pthread_create(&pid_send,NULL,clien_send_thread,NULL);
+    pthread_create(&pid_recv,NULL,clien_recv_thread,NULL);
+} 
 
 
 
@@ -316,65 +393,12 @@ int main_menu()
 
 
 
-void *clien_send_thread(void *arg)
-{
-    int i;
-    while(1)
-    {
-        for(i=0;i<m_send_num;i++)
-        {
-            if(send(sockfd,m_pack_send+i,sizeof(PACK),0) < 0){
-               my_err("send",__LINE__);
-            }
-        }
-        sleep(1);
-    }
-}
-
-
-
-void *clien_recv_thread(void *arg)
-{
-    int i;
-    PACK pack_t;
-    while(1)
-    {
-        if(recv(sockfd,&pack_t,sizeof(PACK),0) < 0){
-            my_err("recv",__LINE__);
-        }
-        switch(pack_t.type)
-        {
-            case LOGIN:
-                m_pack_recv_login[m_recv_num_login++] = pack_t;
-                break;
-            case FRIEND_SEE:
-                m_pack_recv_friend_see[m_recv_num_friend_see++] = pack_t;
-                break;
-            case CHAT_ONE:
-                m_pack_recv_chat_one[m_recv_num_chat_one++] = pack_t;
-                break;
-            case CHAT_MANY:
-                m_pack_recv_chat_many[m_recv_num_chat_many++] = pack_t;
-                break;
-            case SEND_FILE:
-                m_pack_recv_send_file[m_recv_num_send_file++] = pack_t;
-                break;
-        }
-        sleep(1);
-    }
-}
 
 
 
 
 
 
-void init_clien_pthread()
-{
-    pthread_t pid_send,pid_recv;
-    pthread_create(&pid_send,NULL,clien_send_thread,NULL);
-    pthread_create(&pid_recv,NULL,clien_recv_thread,NULL);
-} 
 
 
 
@@ -390,43 +414,11 @@ int main(int argc, char const *argv[])
 
 	signal(SIGINT,sig_close);//关闭CTRL+C
     init();//启动并连接服务器
-    //init_clien_pthread();
 
-    login_menu();
-    /*while(1){
-        if(send(sockfd,&flag,sizeof(int),0) < 0){
-            my_err("send",__LINE__);
-        }
-        if(login())  break;
-    }
-
-    while(1)
-    {
-        if(send(sockfd,&flag,sizeof(int),0) < 0){
-            my_err("send",__LINE__);
-        }
-        switch(flag)
-        {
-            case LOGIN:
-                break;
-            case REGISTER:
-                break;
-            case FRIEND_SEE:
-                break;
-            case FRIEND_ADD:
-                break;
-            case FRIEND_DEL:
-                break;
-            case CHAT_ONE:
-                break;
-            case CHAT_MANY:
-                break;
-            case SEND_FILE:
-                break;
-            case EXIT:
-                break;       
-        }
-    }*/
+    login_menu();   
+    init_clien_pthread();
+    main_menu();
+  
     
 
 	return 0;
