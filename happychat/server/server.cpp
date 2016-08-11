@@ -22,11 +22,13 @@
 #define SEND_FILE  8
 #define EXIT      -1
 
-#define MAX_CHAR  1024
-#define EPOLL_MAX 200000
-#define LISTENMAX 1000
-#define USER_MAX  100  //the user on line
-#define GROUP_MAX 50
+
+#define SIZE_PASS_NAME  30
+#define MAX_CHAR        1024
+#define EPOLL_MAX       200000
+#define LISTENMAX       1000
+#define USER_MAX        100  //the user on line
+#define GROUP_MAX       50
 
 #define DOWNLINE   0
 #define ONLINE     1
@@ -42,8 +44,8 @@ typedef struct infor_user
     int  socket_id;
     char friends[MAX_CHAR][MAX_CHAR];
     int  friends_num;
-    char groups[MAX_CHAR][MAX_CHAR];
-    char groups_num;
+    char group[MAX_CHAR][MAX_CHAR];
+    char group_num;
 }INFO_USER;
 
 
@@ -131,6 +133,13 @@ void signal_close(int i)
     exit(1);
 }
 
+void send_pack(PACK *pack_send_pack_t)
+{
+    pthread_mutex_lock(&mutex);  
+    memcpy(&m_pack_send[m_send_num++],pack_send_pack_t,sizeof(PACK));
+    pthread_mutex_unlock(&mutex);  
+}
+
 
 
 
@@ -179,13 +188,16 @@ void login(PACK *recv_pack)
     if((id=find_userinfor(recv_pack->data.send_name)) == 0){//not exit username
         login_flag[0] = '2';
     }
+    else if (m_infor_user[id].statu == ONLINE)
+    {
+        login_flag[0] = '3';
+    }
     else if(strcmp(recv_pack->data.mes,m_infor_user[id].password) == 0){//the password is not crrect
         login_flag[0] = '1';
         //change user infor
         m_infor_user[id].statu = ONLINE;
         m_infor_user[id].socket_id = recv_pack->data.send_fd; 
         printf("%s get online!\n", m_infor_user[id].username);
-
     }
     else login_flag[0] = '0';
     
@@ -198,11 +210,11 @@ void login(PACK *recv_pack)
     strcpy(recv_pack->data.mes,login_flag);
     recv_pack->data.recv_fd = recv_pack->data.send_fd;
     recv_pack->data.send_fd = listenfd;
-    
-    pthread_mutex_lock(&mutex);  
+    send_pack(recv_pack);
+    /*pthread_mutex_lock(&mutex);  
     memcpy(&m_pack_send[m_send_num++],recv_pack,sizeof(PACK));
     pthread_mutex_unlock(&mutex);  
-    
+    */
     free(recv_pack);
 }
 /**********************************************************/
@@ -254,14 +266,115 @@ void registe(PACK *recv_pack)
     strcpy(recv_pack->data.mes,registe_flag);
     recv_pack->data.recv_fd = recv_pack->data.send_fd;
     recv_pack->data.send_fd = listenfd;
-    
-    pthread_mutex_lock(&mutex);  
+    send_pack(recv_pack);
+    /*pthread_mutex_lock(&mutex);  
     memcpy(&m_pack_send[m_send_num++],recv_pack,sizeof(PACK));
     pthread_mutex_unlock(&mutex);  
-   
+   */
     free(recv_pack);
 }
 /**********************************************************/
+
+void send_statu(PACK *recv_pack)
+{
+    char str[MAX_CHAR];
+    char name_t[MAX_CHAR];
+    char send_statu_mes[MAX_CHAR*2];
+    int id;
+    int count = 0;
+
+    memset(send_statu_mes,0,sizeof(send_statu_mes));
+    
+    id = find_userinfor(recv_pack->data.send_name);
+    /*for(int i = 1;i <= m_user_num ;i++)
+    {
+        if(strcmp(recv_pack->data.send_name,m_infor_user[i].username) == 0)
+        {
+            id = i;
+            break;
+        }
+    }*/
+
+
+    /*for(int i=1;i<=m_user_num;i++)
+        printf("send_statu:%d,%s\n", i,m_infor_user[i].username);    
+    printf("send_statu:id=%d\n", id);*/
+
+
+    send_statu_mes[count++] = m_infor_user[id].friends_num;
+
+
+    for(int i=1 ;i <= m_infor_user[id].friends_num ;i++)
+    {
+        strcpy(name_t,m_infor_user[id].friends[i]);
+        printf("send_statufriend:%d %s\n",i,name_t);
+        for(int j=1 ;j <= m_user_num ;j++)
+        {
+            if(strcmp(name_t,m_infor_user[j].username) == 0)
+            {
+                memset(str,0,sizeof(str));
+                if(m_infor_user[j].statu == ONLINE)
+                    sprintf(str,"%d%s\0",ONLINE,m_infor_user[j].username);
+                else
+                    sprintf(str,"%d%s\0",DOWNLINE,m_infor_user[j].username);
+                printf("str = %s\n",str);
+                for(int k = 0 ;k< SIZE_PASS_NAME;k++)
+                {
+                    send_statu_mes[k+count] = str[k];
+                }
+                count += SIZE_PASS_NAME;
+            }
+        }
+    }
+
+    send_statu_mes[count++] = m_infor_user[id].group_num;
+    for(int i = 1;i <=  m_infor_user[id].group_num;i++)
+    {
+        memset(str,0,sizeof(str));
+        strcpy(name_t,m_infor_user[id].group[i]);
+        sprintf(str,"%s\0",name_t);
+        for(int k = 0 ;k< SIZE_PASS_NAME;k++)
+        {
+            send_statu_mes[k+count] = str[k];
+        }
+        count += SIZE_PASS_NAME;
+    }
+
+    strcpy(recv_pack->data.recv_name,recv_pack->data.send_name);
+    strcpy(recv_pack->data.send_name,"server");
+    memcpy(recv_pack->data.mes,send_statu_mes,MAX_CHAR*2);
+    recv_pack->data.recv_fd = recv_pack->data.send_fd;
+    recv_pack->data.send_fd = listenfd;
+    printf("recv_pack->data.recv_fd:%d\n", recv_pack->data.recv_fd);
+    send_pack(recv_pack);
+    /*pthread_mutex_lock(&mutex);  
+    memcpy(&m_pack_send[m_send_num++],recv_pack,sizeof(PACK));
+    pthread_mutex_unlock(&mutex);  
+    */
+    free(recv_pack);
+
+}
+
+
+
+void friend_add(PACK *recv_pack)
+{
+    int id;
+    id = find_userinfor(recv_pack->data.send_name);
+    
+    strcpy(m_infor_user[id].friends[++(m_infor_user[id].friends_num)],recv_pack->data.mes);
+    
+    id = find_userinfor(recv_pack->data.mes);
+    strcpy(m_infor_user[id].friends[++(m_infor_user[id].friends_num)],recv_pack->data.send_name);
+
+    //printf("friend add  m_infor_user[id].friends_num:%d\n", m_infor_user[id].friends_num);
+    //printf("friend add  m_infor_user[id].friends_num:%s\n", m_infor_user[id].friends[m_infor_user[id].friends_num]);
+    free(recv_pack);
+}
+
+
+
+
 
 
 
@@ -283,10 +396,10 @@ void *deal(void *recv_pack_t)
             registe(recv_pack);
             break;
         case FRIEND_SEE:
-
+            send_statu(recv_pack);
             break;
         case FRIEND_ADD:
-
+            friend_add(recv_pack);
             break;
         case FRIEND_DEL:
 
@@ -314,21 +427,46 @@ void *deal(void *recv_pack_t)
 /************************send_thread*****************************/
 void *serv_send_thread(void *arg)
 {
+    int user_statu = DOWNLINE;
+    int id_stop;
     int i,recv_fd_t;
     while(1)
     {
         pthread_mutex_lock(&mutex); 
         //printf("serv_send_thread:%d\n", m_send_num);
+        
         for(i = m_send_num-1;i>=0;i--)
         {
-            recv_fd_t = m_pack_send[i].data.recv_fd;
-            if(send(recv_fd_t,&m_pack_send[i],sizeof(PACK),0) < 0){
-                my_err("send",__LINE__);
+
+            for(int j =1; j <= m_user_num ;j++)
+            {
+
+                if(strcmp(m_pack_send[i].data.recv_name,m_infor_user[j].username) == 0)
+                {
+                    user_statu = m_infor_user[j].statu;
+                }
             }
-            printf("serv_send_thread:%d\n", m_send_num);
+
+            if(user_statu == ONLINE || m_pack_send[i].type == LOGIN || m_pack_send[i].type == REGISTER)
+            {
+               
+                recv_fd_t = m_pack_send[i].data.recv_fd;
+                if(send(recv_fd_t,&m_pack_send[i],sizeof(PACK),0) < 0){
+                my_err("send",__LINE__);
+                }
+                printf("serv_send_thread:%d\n", m_send_num);
+                m_send_num-- ;
+                break;
+            }
         }
-        m_send_num = 0;
-       pthread_mutex_unlock(&mutex);  
+        if(i<0)  i = 0;
+        for(int j = i;j<=m_send_num&&m_send_num;j++)
+        {
+            m_pack_send[j] = m_pack_send[j+1];
+        }
+
+        
+        pthread_mutex_unlock(&mutex);  
     }
 }
 
@@ -438,12 +576,14 @@ int main()
                 }
                 else if(n == 0)
                 {
-                    for(int i=1;i<=m_user_num;i++)
+                 
+                    for(int j=1;j<=m_user_num;j++)
                     {
-                        if(events[i].data.fd == m_infor_user[i].socket_id)
+                        if(events[i].data.fd == m_infor_user[j].socket_id)
                         {
-                            printf("%s down line!",m_infor_user[i].username);
-                            m_infor_user[i].statu = DOWNLINE;
+                            printf("%s down line!\n",m_infor_user[j].username);
+                            m_infor_user[j].statu = DOWNLINE;
+                            break;
                         }
                     }   
                     ev.data.fd = events[i].data.fd;

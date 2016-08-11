@@ -11,7 +11,7 @@
 #include <string.h>
 #include <signal.h>
 #include <time.h>
-
+ 
 #define LOGIN      1
 #define REGISTER   2
 #define FRIEND_SEE 3
@@ -22,18 +22,43 @@
 #define SEND_FILE  8
 #define EXIT      -1
 
-#define MAX_CHAR  1024
+
+#define SIZE_PASS_NAME   30
+#define MAX_PACK_CONTIAN 100
+#define MAX_CHAR         1024
+
+#define DOWNLINE   0
+#define ONLINE     1
+#define BUZY       2
+
 
 
 /**************************************************/
-typedef struct stat{
-    int friend_see;
-    int friend_add;
-    int friend_del;
-    int chat_one;
-    int chat_many;
-    int send_file;
-}STAT;
+
+typedef struct  friend_info
+{
+    int statu;
+    char name[MAX_CHAR];
+}FRIEND_INFO; 
+
+
+
+
+typedef struct user_infor{
+    char        username    [MAX_CHAR];
+    FRIEND_INFO friends     [MAX_CHAR];
+    int         friends_num;
+    char        group       [MAX_CHAR][MAX_CHAR];
+    int         group_num;
+}USER_INFOR;
+
+USER_INFOR m_my_infor;
+
+
+
+
+
+
 
 /******************be sure same with server*******************************/
 typedef struct datas{
@@ -70,9 +95,7 @@ int sockfd;
 char *IP = "127.0.0.1";
 short PORT = 10222;
 typedef struct sockaddr SA;
-pthread_mutex_t  mutex;
-
-STAT m_status;
+pthread_mutex_t  mutex_local_user;
 
 
 /************************客户端缓冲区**********************/
@@ -92,12 +115,16 @@ int  m_send_num;
 
 
 /*****************recv*********************/
-PACK m_pack_recv_friend_see [MAX_CHAR];
-PACK m_pack_recv_chat_one   [MAX_CHAR];
-PACK m_pack_recv_chat_many  [MAX_CHAR];
-PACK m_pack_recv_send_file  [MAX_CHAR];
 
-int m_recv_num_login;
+PACK m_pack_recv_friend_del   [MAX_PACK_CONTIAN];
+PACK m_pack_recv_friend_add   [MAX_PACK_CONTIAN];
+PACK m_pack_recv_friend_see   [MAX_PACK_CONTIAN];
+PACK m_pack_recv_chat_one     [MAX_PACK_CONTIAN];
+PACK m_pack_recv_chat_many    [MAX_PACK_CONTIAN];
+PACK m_pack_recv_send_file    [MAX_PACK_CONTIAN];
+
+int m_recv_num_friend_del;
+int m_recv_num_friend_add;
 int m_recv_num_friend_see;
 int m_recv_num_chat_one;
 int m_recv_num_chat_many;
@@ -179,10 +206,15 @@ int login()
         printf("the username is not exit.\n");
         return 0;
     }   
+    if(login_flag ==  3 ){
+        printf("the user has loged in .\n");
+        return 0;
+    }  
     if(login_flag == 0) {
         printf("the password is not crrect.\n");
         return 0;
     }
+    strcpy(m_my_infor.username,username_t);
     printf("load successfully!\n");
     return 1;
 }
@@ -267,27 +299,6 @@ void registe()
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 /*void *clien_send_thread(void *arg)
 {
     int i;
@@ -305,6 +316,67 @@ void registe()
 
 
 
+
+
+
+
+
+
+
+void change_statu(PACK pack_deal_statu_t)
+{
+    int count = 0;
+    m_my_infor.friends_num=pack_deal_statu_t.data.mes[count++];
+
+    for(int i=1; i <= m_my_infor.friends_num ;i++)
+    {
+        for(int j=0;j<SIZE_PASS_NAME;j++)
+        {
+            if(j == 0)   
+                m_my_infor.friends[i].statu = pack_deal_statu_t.data.mes[count+j] - 48;
+            else
+                m_my_infor.friends[i].name[j-1] = pack_deal_statu_t.data.mes[count+j];
+        }
+        count += SIZE_PASS_NAME;
+    }
+
+    m_my_infor.group_num=pack_deal_statu_t.data.mes[count++];
+    for(int i=1 ;i <= m_my_infor.group_num ;i++)
+    {
+        for(int j=0;j<SIZE_PASS_NAME;j++)
+        {
+            m_my_infor.group[i][j] = pack_deal_statu_t.data.mes[count+j];
+        }
+        count += SIZE_PASS_NAME;
+    }
+}
+
+
+
+
+void *deal_statu(void *arg)
+{
+    int i;
+    printf("function deal_statu:\n");
+    while(1)
+    {
+        pthread_mutex_lock(&mutex_local_user); 
+        for(i=1;i<=m_recv_num_friend_see;i++)
+        {
+            //printf("flag1\n");
+            change_statu(m_pack_recv_friend_see[i]);
+        }
+        m_recv_num_friend_see = 0;
+        pthread_mutex_unlock(&mutex_local_user);  
+    }
+}
+
+
+
+
+
+
+
 void *clien_recv_thread(void *arg)
 {
     int i;
@@ -314,26 +386,55 @@ void *clien_recv_thread(void *arg)
         if(recv(sockfd,&pack_t,sizeof(PACK),0) < 0){
             my_err("recv",__LINE__);
         }
-        pthread_mutex_lock(&mutex); 
+        pthread_mutex_lock(&mutex_local_user); 
         switch(pack_t.type)
         {
-            case LOGIN:
-                //m_pack_recv_login[m_recv_num_login++] = pack_t;
+            printf("clien_recv_thread:%d\n", pack_t.type);
+            case FRIEND_DEL:
+                m_pack_recv_friend_del[++m_recv_num_friend_del] = pack_t;
+                break;
+            case FRIEND_ADD:
+                m_pack_recv_friend_add[++m_recv_num_friend_add] = pack_t;
                 break;
             case FRIEND_SEE:
-                m_pack_recv_friend_see[m_recv_num_friend_see++] = pack_t;
+                m_pack_recv_friend_see[++m_recv_num_friend_see] = pack_t;
                 break;
             case CHAT_ONE:
-                m_pack_recv_chat_one[m_recv_num_chat_one++] = pack_t;
+                m_pack_recv_chat_one[++m_recv_num_chat_one]     = pack_t;
                 break;
             case CHAT_MANY:
-                m_pack_recv_chat_many[m_recv_num_chat_many++] = pack_t;
+                m_pack_recv_chat_many[++m_recv_num_chat_many]   = pack_t;
                 break;
             case SEND_FILE:
-                m_pack_recv_send_file[m_recv_num_send_file++] = pack_t;
+                m_pack_recv_send_file[++m_recv_num_send_file]   = pack_t;
                 break;
         }
-        pthread_mutex_unlock(&mutex);  
+        pthread_mutex_unlock(&mutex_local_user);  
+    }
+}
+
+
+void init_clien_pthread()
+{
+    pthread_t pid_deal_statu,pid_recv;
+    pthread_create(&pid_deal_statu,NULL,deal_statu,NULL);
+    pthread_create(&pid_recv,NULL,clien_recv_thread,NULL);
+} 
+
+
+
+/********************friend***************************************/
+
+
+void get_status_mes()
+{
+    PACK pack_friend_see;
+    pack_friend_see.type = FRIEND_SEE;
+    strcpy(pack_friend_see.data.send_name,m_my_infor.username);
+    strcpy(pack_friend_see.data.recv_name,"server");
+    memset(pack_friend_see.data.mes,0,sizeof(pack_friend_see.data.mes));
+    if(send(sockfd,&pack_friend_see,sizeof(PACK),0) < 0){
+        my_err("send",__LINE__);
     }
 }
 
@@ -341,15 +442,142 @@ void *clien_recv_thread(void *arg)
 
 
 
-
-void init_clien_pthread()
+void friends_see()
 {
-    pthread_t pid_send,pid_recv;
-   // pthread_create(&pid_send,NULL,clien_send_thread,NULL);
-    pthread_create(&pid_recv,NULL,clien_recv_thread,NULL);
-} 
+   
+    pthread_mutex_lock(&mutex_local_user);
+    printf("friends num:%d\n", m_my_infor.friends_num); 
+    printf("\n\nthe list of friends:\n");
+    for(int i=1 ;i<=m_my_infor.friends_num ;i++)
+    {
+        //printf("m_my_infor.friends[i].statu:%d\n", m_my_infor.friends[i].statu);
+        switch(m_my_infor.friends[i].statu)
+        {
+            case ONLINE:
+                printf("ID:%d \033[;32m%s\033[0m[ONLINE]\n", i,m_my_infor.friends[i].name);
+                break;
+            case DOWNLINE:
+                printf("ID:%d \033[;31m%s\033[0m[DOWNLINE]\n", i,m_my_infor.friends[i].name);
+                break;
+
+        }
 
 
+    }
+    pthread_mutex_unlock(&mutex_local_user);  
+
+}
+
+
+
+
+
+
+
+
+
+
+int judge_same_friend(char add_friend_t[])
+{
+    int i;
+    for(i=1;i<=m_my_infor.friends_num;i++)
+    {
+        if(strcmp(m_my_infor.friends[i].name,add_friend_t) == 0)
+            return 1;
+    }
+    return 0;
+}
+
+
+
+
+
+void add_friend()
+{
+    PACK pack_add_friend_t;
+    char add_friend_t[MAX_CHAR];
+    pack_add_friend_t.type = FRIEND_ADD;
+    printf("please input the name of friend you want to add:\n");
+    scanf("%s",add_friend_t);
+
+    if(judge_same_friend(add_friend_t))
+    {
+        printf("you already have same friends!\n");
+        return ;
+    }
+    printf("m_my_infor.username:%s\n", m_my_infor.username);
+    strcpy(pack_add_friend_t.data.send_name,m_my_infor.username);
+    strcpy(pack_add_friend_t.data.recv_name,"server");
+    strcpy(pack_add_friend_t.data.mes,add_friend_t); 
+    
+    if(send(sockfd,&pack_add_friend_t,sizeof(PACK),0) < 0){
+        my_err("send",__LINE__);
+    }
+    get_status_mes();
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+/***********************group***********************************/
+
+
+
+
+void group_see()
+{
+    pthread_mutex_lock(&mutex_local_user); 
+    printf("\n\nthe list of group:\n");
+    for(int i=1 ;i<=m_my_infor.group_num ;i++)
+    {
+        printf("ID:%d %s\n", i,m_my_infor.group[i]);
+    }
+    pthread_mutex_unlock(&mutex_local_user);  
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+void massege()
+{
+
+}
 
 
 int main_menu()
@@ -357,13 +585,19 @@ int main_menu()
     int chioce;
     do
     {
+        get_status_mes();
         printf("\n\t\t*******************************\n");
         printf("\t\t*        1.show   friends       *\n");
         printf("\t\t*        2.add    friends       *\n");
         printf("\t\t*        3.delete friends       *\n");
-        printf("\t\t*        4.chat with one        *\n");
-        printf("\t\t*        5.chat with many       *\n");
-        printf("\t\t*        6.send   file          *\n");
+        printf("\t\t*        4.show   group         *\n");
+        printf("\t\t*        5.add    group         *\n");
+        printf("\t\t*        6.quit   group         *\n");
+        printf("\t\t*        7.delete group         *\n");
+        printf("\t\t*        8.chat with one        *\n");
+        printf("\t\t*        9.chat with many       *\n");
+        printf("\t\t*        10.send  file          *\n");
+        printf("\t\t*        11.message             *\n");
         printf("\t\t*        0.exit                 *\n");
         printf("\t\t*******************************\n");
         printf("\t\tchoice：");
@@ -371,17 +605,37 @@ int main_menu()
         switch(chioce)
         {  
             case 1:
+                friends_see();
                 break;
             case 2:
+                add_friend();
                 break;
             case 3:
+
                 break;
             case 4:
+                group_see();
                 break;
             case 5:
+
                 break;
             case 6:
+
                 break;
+            case 7:
+
+                break;
+            case 8:
+
+                break;
+            case 9:
+
+                break;
+            case 10:
+
+                break;
+            case 11:
+                massege();
             default:
                 break;
         }
