@@ -17,9 +17,13 @@
 #define FRIEND_SEE 3
 #define FRIEND_ADD 4
 #define FRIEND_DEL 5
-#define CHAT_ONE   6
-#define CHAT_MANY  7
-#define SEND_FILE  8
+#define GROUP_SEE  6  
+#define GROUP_ADD  7
+#define GROUP_QIUT 8
+#define GROUP_DEL  9
+#define CHAT_ONE   10
+#define CHAT_MANY  11
+#define SEND_FILE  12
 #define EXIT      -1
 
 
@@ -35,6 +39,13 @@
 #define BUZY       2
 
 
+
+
+
+
+
+
+
 /********************user infor***********************************/
 typedef struct infor_user 
 {
@@ -42,9 +53,9 @@ typedef struct infor_user
     char password[MAX_CHAR];
     int  statu;//don't foget to change is to 0 when the server begin
     int  socket_id;
-    char friends[MAX_CHAR][MAX_CHAR];
+    char friends[MAX_CHAR][MAX_CHAR];//begin from 1
     int  friends_num;
-    char group[MAX_CHAR][MAX_CHAR];
+    char group[MAX_CHAR][MAX_CHAR];  //begin from 1
     char group_num;
 }INFO_USER;
 
@@ -64,6 +75,20 @@ typedef struct infor_group
 
 INFO_GROUP   m_infor_group  [GROUP_MAX];
 int          m_group_num;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 /*********************************************************/
 
 
@@ -115,6 +140,14 @@ int  m_send_num;
 
 
 
+
+
+
+
+
+
+
+
 void my_err(const char * err_string,int line)
 {
 	fprintf(stderr, "line:%d  ", line);
@@ -133,12 +166,36 @@ void signal_close(int i)
     exit(1);
 }
 
+
+
 void send_pack(PACK *pack_send_pack_t)
 {
     pthread_mutex_lock(&mutex);  
-    memcpy(&m_pack_send[m_send_num++],pack_send_pack_t,sizeof(PACK));
+    memcpy(&(m_pack_send[m_send_num++]),pack_send_pack_t,sizeof(PACK));
     pthread_mutex_unlock(&mutex);  
+    free(pack_send_pack_t);
 }
+
+
+
+
+/***************************debug******************************/
+
+void print_send_pack()
+{
+    for(int i=1;i<=m_send_num;i++)
+    {
+        printf("********%d*********\n", i);
+        printf("type      :%d\n", m_pack_send[i].type);
+        printf("send_name :%s\n", m_pack_send[i].data.send_name);
+        printf("recv_name :%s\n", m_pack_send[i].data.recv_name);
+        printf("send_fd   :%d\n", m_pack_send[i].data.send_fd);
+        printf("recv_fd   :%s\n", m_pack_send[i].data.recv_fd);
+        printf("mes       :%s\n", m_pack_send[i].data.mes);
+        printf("***********************\n\n\n");
+    }
+}
+
 
 
 
@@ -196,26 +253,28 @@ void login(PACK *recv_pack)
         login_flag[0] = '1';
         //change user infor
         m_infor_user[id].statu = ONLINE;
-        m_infor_user[id].socket_id = recv_pack->data.send_fd; 
-        printf("%s get online!\n", m_infor_user[id].username);
-    }
+        m_infor_user[id].socket_id = recv_pack->data.send_fd;
+        
+        printf("\n\n\033[;45m********login**********\033[0m\n");
+        printf("\033[;45m*\033[0m %s get online!\n", m_infor_user[id].username);
+        printf("\033[;45m*\033[0m statu:    %d\n", m_infor_user[id].statu); 
+        printf("\033[;45m*\033[0m socket_id:%d\n\n",m_infor_user[id].socket_id);
+    }   
+      
     else login_flag[0] = '0';
     
     login_flag[1] = '\0';
-    printf("%s\n", recv_pack->data.send_name);
+    /*printf("%s\n", recv_pack->data.send_name);
     printf("%s\n", recv_pack->data.mes);
-    printf("%d\n", m_user_num);     
+    printf("%d\n", m_user_num); */    
     strcpy(recv_pack->data.recv_name,recv_pack->data.send_name);
     strcpy(recv_pack->data.send_name,"server");
     strcpy(recv_pack->data.mes,login_flag);
     recv_pack->data.recv_fd = recv_pack->data.send_fd;
     recv_pack->data.send_fd = listenfd;
     send_pack(recv_pack);
-    /*pthread_mutex_lock(&mutex);  
-    memcpy(&m_pack_send[m_send_num++],recv_pack,sizeof(PACK));
-    pthread_mutex_unlock(&mutex);  
-    */
-    free(recv_pack);
+    
+
 }
 /**********************************************************/
 
@@ -250,12 +309,11 @@ void registe(PACK *recv_pack)
         m_user_num++;
         strcpy(m_infor_user[m_user_num].username,recv_pack->data.send_name);
         strcpy(m_infor_user[m_user_num].password,recv_pack->data.mes);
-        printf("\nfunction registe:\n");
-        printf("*registe success!\n");
-        printf("*username:%s\n", m_infor_user[m_user_num].username);
-        printf("*password:%s\n", m_infor_user[m_user_num].password);
-        printf("%d\n", m_user_num);
-
+        printf("\n\n\033[;44m&&&&function registe&&&&\033[0m \n");
+        printf("\033[;44m*\033[0m registe success!\n");
+        printf("\033[;44m*\033[0m username:%s\n", m_infor_user[m_user_num].username);
+        printf("\033[;44m*\033[0m password:%s\n", m_infor_user[m_user_num].password);
+        printf("\033[;44m*\033[0m user_num:%d\n\n", m_user_num);
         m_infor_user[m_user_num].statu = DOWNLINE;
     }
     else registe_flag[0] = '0';
@@ -267,11 +325,8 @@ void registe(PACK *recv_pack)
     recv_pack->data.recv_fd = recv_pack->data.send_fd;
     recv_pack->data.send_fd = listenfd;
     send_pack(recv_pack);
-    /*pthread_mutex_lock(&mutex);  
-    memcpy(&m_pack_send[m_send_num++],recv_pack,sizeof(PACK));
-    pthread_mutex_unlock(&mutex);  
-   */
-    free(recv_pack);
+
+    
 }
 /**********************************************************/
 
@@ -345,14 +400,8 @@ void send_statu(PACK *recv_pack)
     memcpy(recv_pack->data.mes,send_statu_mes,MAX_CHAR*2);
     recv_pack->data.recv_fd = recv_pack->data.send_fd;
     recv_pack->data.send_fd = listenfd;
-    printf("recv_pack->data.recv_fd:%d\n", recv_pack->data.recv_fd);
-    send_pack(recv_pack);
-    /*pthread_mutex_lock(&mutex);  
-    memcpy(&m_pack_send[m_send_num++],recv_pack,sizeof(PACK));
-    pthread_mutex_unlock(&mutex);  
-    */
-    free(recv_pack);
 
+    send_pack(recv_pack);
 }
 
 
@@ -417,7 +466,10 @@ void friend_del(PACK *recv_pack)
 }
 
 
-
+void send_mes_to_one(PACK *recv_pack)
+{
+    send_pack(recv_pack);
+}
 
 
 
@@ -445,7 +497,7 @@ void *deal(void *recv_pack_t)
             friend_del(recv_pack);
             break;
         case CHAT_ONE:
-
+            send_mes_to_one(recv_pack);
             break;
         case CHAT_MANY:
 
@@ -469,12 +521,12 @@ void *serv_send_thread(void *arg)
 {
     int user_statu = DOWNLINE;
     int id_stop;
-    int i,recv_fd_t;
+    int i,recv_fd_t,recv_fd_online;
     while(1)
     {
         pthread_mutex_lock(&mutex); 
         //printf("serv_send_thread:%d\n", m_send_num);
-        
+        user_statu = DOWNLINE;
         for(i = m_send_num-1;i>=0;i--)
         {
 
@@ -484,29 +536,36 @@ void *serv_send_thread(void *arg)
                 if(strcmp(m_pack_send[i].data.recv_name,m_infor_user[j].username) == 0)
                 {
                     user_statu = m_infor_user[j].statu;
+                    if(user_statu == ONLINE)
+                        recv_fd_online = m_infor_user[j].socket_id;
+                    break;
                 }
             }
 
             if(user_statu == ONLINE || m_pack_send[i].type == LOGIN || m_pack_send[i].type == REGISTER)
             {
-               
-                recv_fd_t = m_pack_send[i].data.recv_fd;
+                if(user_statu == ONLINE)
+                    recv_fd_t = recv_fd_online;
+                else
+                    recv_fd_t = m_pack_send[i].data.recv_fd;
                 if(send(recv_fd_t,&m_pack_send[i],sizeof(PACK),0) < 0){
-                my_err("send",__LINE__);
+                    my_err("send",__LINE__);
                 }
-                printf("serv_send_thread:%d\n", m_send_num);
+                printf("\n\n\033[;42m*****send pack****\033[0m\n");
+                printf("\033[;42m*\033[0m from: %s\n",m_pack_send[i].data.recv_name);
+                printf("\033[;42m*\033[0m to  : %s\n",m_pack_send[i].data.send_name);
+                printf("\033[;42m*\033[0m mes : %s\n",m_pack_send[i].data.mes);
                 m_send_num-- ;
+                printf("\033[;42m*\033[0m pack left Now is:%d\n\n", m_send_num);
+                for(int j = i;j<=m_send_num&&m_send_num;j++)
+                {
+                    m_pack_send[j] = m_pack_send[j+1];
+                }
                 break;
             }
         }
-        if(i<0)  i = 0;
-        for(int j = i;j<=m_send_num&&m_send_num;j++)
-        {
-            m_pack_send[j] = m_pack_send[j+1];
-        }
-
-        
-        pthread_mutex_unlock(&mutex);  
+        pthread_mutex_unlock(&mutex);
+        usleep(1);  
     }
 }
 
@@ -601,13 +660,17 @@ int main()
 
                 n = recv(events[i].data.fd,&recv_t,sizeof(PACK),0);//读取数据
                 recv_t.data.send_fd = events[i].data.fd;
-                printf("\n\n\n***PACK***\n");
-                printf("*send_name: %s\n", recv_t.data.send_name);
-                printf("*recv_name: %s\n",recv_t.data.recv_name);
-                printf("*mes      : %s\n", recv_t.data.mes);
-                printf("send_fd   : %d\n", recv_t.data.send_fd);
-                printf("recv_fd   : %d\n", recv_t.data.recv_fd);
-                printf("********\n\n");
+                
+                printf("\n\n\n\033[;31m ***PACK***\033[0m\n");
+                printf("\033[;31m*\033[0m send_name: %s\n", recv_t.data.send_name);
+                printf("\033[;31m*\033[0m recv_name: %s\n",recv_t.data.recv_name);
+                printf("\033[;31m*\033[0m mes      : %s\n", recv_t.data.mes);
+                printf("\033[;31m*\033[0m send_fd   : %d\n", recv_t.data.send_fd);
+                printf("\033[;31m*\033[0m recv_fd   : %d\n", recv_t.data.recv_fd);
+                printf("\033[;31m*\033[0m send_pack_num:%d\n", m_send_num);
+                printf("\033[;31m*************\033[0m\n\n\n");
+                
+
                 if(n < 0)//recv错误
                 {     
                     close(events[i].data.fd);
@@ -631,6 +694,11 @@ int main()
                     close(events[i].data.fd);
                     continue;   
                 }
+                pthread_mutex_lock(&mutex); 
+                //print_send_pack();
+                
+                pthread_mutex_unlock(&mutex);  
+                
                 recv_pack = (PACK*)malloc(sizeof(PACK));
                 memcpy(recv_pack, &recv_t, sizeof(PACK));
                 pthread_create(&pid,NULL,deal,(void *)recv_pack);

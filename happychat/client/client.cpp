@@ -17,11 +17,14 @@
 #define FRIEND_SEE 3
 #define FRIEND_ADD 4
 #define FRIEND_DEL 5
-#define CHAT_ONE   6
-#define CHAT_MANY  7
-#define SEND_FILE  8
+#define GROUP_SEE  6  
+#define GROUP_ADD  7
+#define GROUP_QIUT 8
+#define GROUP_DEL  9
+#define CHAT_ONE   10
+#define CHAT_MANY  11
+#define SEND_FILE  12
 #define EXIT      -1
-
 
 #define SIZE_PASS_NAME   30
 #define MAX_PACK_CONTIAN 100
@@ -78,6 +81,11 @@ typedef struct package{
 
 
 
+
+
+
+
+
 /***********************function***********************/
 void my_err(const char * err_string,int line);
 void init();
@@ -116,16 +124,14 @@ int  m_send_num;
 
 
 /*****************recv*********************/
-
 PACK m_pack_recv_friend_see   [MAX_PACK_CONTIAN];
-PACK m_pack_recv_chat_one     [MAX_PACK_CONTIAN];
-PACK m_pack_recv_chat_many    [MAX_PACK_CONTIAN];
+PACK m_pack_recv_chat         [MAX_PACK_CONTIAN];
 PACK m_pack_recv_send_file    [MAX_PACK_CONTIAN];
 
 
+
 int m_recv_num_friend_see;
-int m_recv_num_chat_one;
-int m_recv_num_chat_many;
+int m_recv_num_chat;
 int m_recv_num_send_file;
 
 
@@ -163,22 +169,44 @@ void sig_close(int i)
     close(sockfd);
     exit(0);
 }
+/*************************tools******************************/
+
+void send_pack(int type,char *send_name,char *recv_name,char *mes)
+{
+    PACK pack_send_pack;
+    time_t timep;
+    pack_send_pack.type = type;
+    strcpy(pack_send_pack.data.send_name,send_name);
+    strcpy(pack_send_pack.data.recv_name,recv_name);
+    strcpy(pack_send_pack.data.mes,mes); 
+    time(&timep);
+    pack_send_pack.data.time = timep;
+    if(send(sockfd,&pack_send_pack,sizeof(PACK),0) < 0){
+        my_err("send",__LINE__);
+    }
+}
+
+
+
+
+
+
+
+
+
+
+
 
 
 
 /*************************login************************************/
 int send_login(char username_t[],char password_t[])
 {
-    PACK send_login_t;
     PACK recv_login_t;
     int login_judge_flag = 0;
-    send_login_t.type = LOGIN;
-    strcpy(send_login_t.data.send_name,username_t);
-    strcpy(send_login_t.data.recv_name,"server");
-    strcpy(send_login_t.data.mes,password_t); 
-    if(send(sockfd,&send_login_t,sizeof(PACK),0) < 0){
-        my_err("send",__LINE__);
-    }
+    
+    send_pack(LOGIN,username_t,"server",password_t);
+    
     if(recv(sockfd,&recv_login_t,sizeof(PACK),0) < 0){
         my_err("recv",__LINE__);
     }
@@ -254,16 +282,11 @@ int login_menu()
 
 int send_registe(char username_t[],char password_t[])
 {
-    PACK send_registe_t,recv_registe_t;
+    PACK recv_registe_t;
     int send_registe_flag;
-    send_registe_t.type = REGISTER;
-    strcpy(send_registe_t.data.send_name,username_t);
-    strcpy(send_registe_t.data.recv_name,"server");
-    strcpy(send_registe_t.data.mes,password_t); 
-    if(send(sockfd,&send_registe_t,sizeof(PACK),0) < 0){
-        my_err("send",__LINE__);
-    }
-
+    
+    send_pack(REGISTER,username_t,"server",password_t);
+    
     if(recv(sockfd,&recv_registe_t,sizeof(PACK),0) < 0){
         my_err("recv",__LINE__);
     }
@@ -311,12 +334,6 @@ void registe()
         sleep(1);
     }
 }*/
-
-
-
-
-
-
 
 
 
@@ -388,20 +405,14 @@ void *clien_recv_thread(void *arg)
         switch(pack_t.type)
         {
             printf("clien_recv_thread:%d\n", pack_t.type);
-            case FRIEND_DEL:
-                m_pack_recv_friend_del[++m_recv_num_friend_del] = pack_t;
-                break;
-            case FRIEND_ADD:
-                m_pack_recv_friend_add[++m_recv_num_friend_add] = pack_t;
-                break;
             case FRIEND_SEE:
                 m_pack_recv_friend_see[++m_recv_num_friend_see] = pack_t;
                 break;
             case CHAT_ONE:
-                m_pack_recv_chat_one[++m_recv_num_chat_one]     = pack_t;
+                m_pack_recv_chat[++m_recv_num_chat]             = pack_t;
                 break;
             case CHAT_MANY:
-                m_pack_recv_chat_many[++m_recv_num_chat_many]   = pack_t;
+                m_pack_recv_chat[++m_recv_num_chat]             = pack_t;
                 break;
             case SEND_FILE:
                 m_pack_recv_send_file[++m_recv_num_send_file]   = pack_t;
@@ -457,10 +468,7 @@ void friends_see()
             case DOWNLINE:
                 printf("ID:%d \033[;31m%s\033[0m[DOWNLINE]\n", i,m_my_infor.friends[i].name);
                 break;
-
         }
-
-
     }
     pthread_mutex_unlock(&mutex_local_user);  
 
@@ -490,11 +498,11 @@ int judge_same_friend(char add_friend_t[])
 
 
 
+
 void add_friend()
 {
-    PACK pack_add_friend_t;
     char add_friend_t[MAX_CHAR];
-    pack_add_friend_t.type = FRIEND_ADD;
+    
     printf("please input the name of friend you want to add:\n");
     scanf("%s",add_friend_t);
 
@@ -504,22 +512,14 @@ void add_friend()
         return ;
     }
     printf("m_my_infor.username:%s\n", m_my_infor.username);
-    strcpy(pack_add_friend_t.data.send_name,m_my_infor.username);
-    strcpy(pack_add_friend_t.data.recv_name,"server");
-    strcpy(pack_add_friend_t.data.mes,add_friend_t); 
-    
-    if(send(sockfd,&pack_add_friend_t,sizeof(PACK),0) < 0){
-        my_err("send",__LINE__);
-    }
+    send_pack(FRIEND_ADD,m_my_infor.username,"server",add_friend_t);
     get_status_mes();
 }
 
 
 void del_friend()
 {
-    PACK pack_del_friend_t;
     char del_friend_t[MAX_CHAR];
-    pack_del_friend_t.type = FRIEND_DEL;
     printf("please input the name of friend you want to delete:\n");
     scanf("%s",del_friend_t);
 
@@ -529,13 +529,9 @@ void del_friend()
         return ;
     }
     printf("m_my_infor.username:%s\n", m_my_infor.username);
-    strcpy(pack_del_friend_t.data.send_name,m_my_infor.username);
-    strcpy(pack_del_friend_t.data.recv_name,"server");
-    strcpy(pack_del_friend_t.data.mes,del_friend_t); 
     
-    if(send(sockfd,&pack_del_friend_t,sizeof(PACK),0) < 0){
-        my_err("send",__LINE__);
-    }
+    send_pack(FRIEND_DEL,m_my_infor.username,"server",del_friend_t);
+    
     get_status_mes();
 }
 
@@ -575,7 +571,84 @@ void group_see()
 
 
 
+void send_mes(char mes_recv_name[])
+{
+    PACK pack_send_mes;
+    char mes[MAX_CHAR];
+    time_t timep;
+    getchar();
+    while(1)
+    {   
+        time(&timep);
+        memset(mes,0,sizeof(mes));
+        printf("\n%s",ctime(&timep) );
+        printf("%s->",m_my_infor.username);
+        fgets(mes,MAX_CHAR,stdin);
+        while(mes[0] == 10)
+            fgets(mes,MAX_CHAR,stdin);
+        if(strcmp(mes,"quit\n") == 0)
+            break;
+        
+        //printf("\t%s\n%s\n", m_my_infor.username,ctime(&timep),mes);
 
+        send_pack(CHAT_ONE,m_my_infor.username,mes_recv_name,mes);
+    }
+}
+
+void print_mes(int id)
+{
+    printf("\033[40;42m%s\033[0m\t%s\n",m_pack_recv_chat[id].data.send_name,ctime(&m_pack_recv_chat[id].data.time));
+    printf("%s\n", m_pack_recv_chat[id].data.mes);
+}
+
+
+
+void *show_mes(void *username)
+{
+    int id;
+    char *user_name = (char *)username;
+    while(1)
+    {
+        pthread_mutex_lock(&mutex_local_user); 
+        id = 0;
+        for(int i = m_recv_num_chat ;i >= 1; i--)
+        {
+            if(strcmp(m_pack_recv_chat[i].data.send_name,user_name) == 0)
+            {
+                id = i;
+                print_mes(id);
+                m_recv_num_chat--;
+                for(int j = id; j <= m_recv_num_chat&&m_recv_num_chat ;j++)
+                {
+                    m_pack_recv_chat[j]  =  m_pack_recv_chat[j+1];
+                }
+                break;
+            }
+        }
+        
+        pthread_mutex_unlock(&mutex_local_user); 
+        usleep(1);    
+    }
+
+}
+
+
+
+void send_mes_to_one()
+{
+    pthread_t pid;
+    char mes_recv_name[MAX_CHAR];
+    friends_see();
+    printf("please input the name you want to chat\n");
+    scanf("%s",mes_recv_name);
+    if (!judge_same_friend(mes_recv_name))
+    {
+        printf("sorry,you don't have the friend named !%s\n",mes_recv_name);
+        return ;
+    }
+    pthread_create(&pid,NULL,show_mes,(void *)mes_recv_name);
+    send_mes(mes_recv_name);
+}
 
 
 
@@ -608,18 +681,20 @@ int main_menu()
     do
     {
         get_status_mes();
+        printf("pack num_chat:%d\n", m_recv_num_chat);
         printf("\n\t\t*******************************\n");
         printf("\t\t*        1.show   friends       *\n");
         printf("\t\t*        2.add    friends       *\n");
         printf("\t\t*        3.delete friends       *\n");
         printf("\t\t*        4.show   group         *\n");
         printf("\t\t*        5.add    group         *\n");
-        printf("\t\t*        6.quit   group         *\n");
-        printf("\t\t*        7.delete group         *\n");
-        printf("\t\t*        8.chat with one        *\n");
-        printf("\t\t*        9.chat with many       *\n");
-        printf("\t\t*        10.send  file          *\n");
-        printf("\t\t*        11.message             *\n");
+        printf("\t\t*        6.join   group         *\n");
+        printf("\t\t*        7.quit   group         *\n");
+        printf("\t\t*        8.delete group         *\n");
+        printf("\t\t*        9.chat with one        *\n");
+        printf("\t\t*        10.chat with many      *\n");
+        printf("\t\t*        11.send  file          *\n");
+        printf("\t\t*        12.message  box        *\n");
         printf("\t\t*        0.exit                 *\n");
         printf("\t\t*******************************\n");
         printf("\t\tchoice：");
@@ -648,7 +723,7 @@ int main_menu()
 
                 break;
             case 8:
-
+                send_mes_to_one();
                 break;
             case 9:
 
