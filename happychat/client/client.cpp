@@ -38,6 +38,7 @@
 typedef struct  friend_info
 {
     int statu;
+    int mes_num;
     char name[MAX_CHAR];
 }FRIEND_INFO; 
 
@@ -116,15 +117,12 @@ int  m_send_num;
 
 /*****************recv*********************/
 
-PACK m_pack_recv_friend_del   [MAX_PACK_CONTIAN];
-PACK m_pack_recv_friend_add   [MAX_PACK_CONTIAN];
 PACK m_pack_recv_friend_see   [MAX_PACK_CONTIAN];
 PACK m_pack_recv_chat_one     [MAX_PACK_CONTIAN];
 PACK m_pack_recv_chat_many    [MAX_PACK_CONTIAN];
 PACK m_pack_recv_send_file    [MAX_PACK_CONTIAN];
 
-int m_recv_num_friend_del;
-int m_recv_num_friend_add;
+
 int m_recv_num_friend_see;
 int m_recv_num_chat_one;
 int m_recv_num_chat_many;
@@ -517,6 +515,30 @@ void add_friend()
 }
 
 
+void del_friend()
+{
+    PACK pack_del_friend_t;
+    char del_friend_t[MAX_CHAR];
+    pack_del_friend_t.type = FRIEND_DEL;
+    printf("please input the name of friend you want to delete:\n");
+    scanf("%s",del_friend_t);
+
+    if(!judge_same_friend(del_friend_t))
+    {
+        printf("you don't have this friends on list!\n");
+        return ;
+    }
+    printf("m_my_infor.username:%s\n", m_my_infor.username);
+    strcpy(pack_del_friend_t.data.send_name,m_my_infor.username);
+    strcpy(pack_del_friend_t.data.recv_name,"server");
+    strcpy(pack_del_friend_t.data.mes,del_friend_t); 
+    
+    if(send(sockfd,&pack_del_friend_t,sizeof(PACK),0) < 0){
+        my_err("send",__LINE__);
+    }
+    get_status_mes();
+}
+
 
 
 
@@ -611,7 +633,7 @@ int main_menu()
                 add_friend();
                 break;
             case 3:
-
+                del_friend();
                 break;
             case 4:
                 group_see();

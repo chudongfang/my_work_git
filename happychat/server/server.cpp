@@ -359,22 +359,62 @@ void send_statu(PACK *recv_pack)
 
 void friend_add(PACK *recv_pack)
 {
-    int id;
-    id = find_userinfor(recv_pack->data.send_name);
+    int id_own,id_friend;
+    id_own = find_userinfor(recv_pack->data.send_name);
     
-    strcpy(m_infor_user[id].friends[++(m_infor_user[id].friends_num)],recv_pack->data.mes);
+    strcpy(m_infor_user[id_own].friends[++(m_infor_user[id_own].friends_num)],recv_pack->data.mes);
     
-    id = find_userinfor(recv_pack->data.mes);
-    strcpy(m_infor_user[id].friends[++(m_infor_user[id].friends_num)],recv_pack->data.send_name);
+    id_friend = find_userinfor(recv_pack->data.mes);
+    strcpy(m_infor_user[id_friend].friends[++(m_infor_user[id_friend].friends_num)],recv_pack->data.send_name);
 
     //printf("friend add  m_infor_user[id].friends_num:%d\n", m_infor_user[id].friends_num);
     //printf("friend add  m_infor_user[id].friends_num:%s\n", m_infor_user[id].friends[m_infor_user[id].friends_num]);
     free(recv_pack);
 }
 
+void del_friend_infor(int id,char friend_name[]) 
+{
+    int id_1;
+    for(int i = 1 ;i<=m_infor_user[id].friends_num;i++)
+    {
+        if(strcmp(m_infor_user[id].friends[i],friend_name) == 0)
+        {   
+            id_1 = i;
+            break;
+        }
+
+    }
+    for(int i = id_1;i<m_infor_user[id].friends_num;i++)
+    {
+        strcpy(m_infor_user[id].friends[i],m_infor_user[id].friends[i+1]);
+    }
+    m_infor_user[id].friends_num--;
+}
 
 
 
+
+
+
+
+void friend_del(PACK *recv_pack)
+{
+    int id_own,id_own_1;
+    int id_friend,id_friend_1;
+    id_own = find_userinfor(recv_pack->data.send_name);
+    
+
+    del_friend_infor(id_own,recv_pack->data.mes); 
+
+    
+    id_friend = find_userinfor(recv_pack->data.mes);
+
+    del_friend_infor(id_friend,recv_pack->data.send_name); 
+    //printf("friend add  m_infor_user[id].friends_num:%d\n", m_infor_user[id].friends_num);
+    //printf("friend add  m_infor_user[id].friends_num:%s\n", m_infor_user[id].friends[m_infor_user[id].friends_num]);
+    free(recv_pack);
+
+}
 
 
 
@@ -402,7 +442,7 @@ void *deal(void *recv_pack_t)
             friend_add(recv_pack);
             break;
         case FRIEND_DEL:
-
+            friend_del(recv_pack);
             break;
         case CHAT_ONE:
 
