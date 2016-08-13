@@ -12,20 +12,20 @@
 #include <signal.h>
 #include <time.h>
 
-#define LOGIN      1
-#define REGISTER   2
-#define FRIEND_SEE 3
-#define FRIEND_ADD 4
-#define FRIEND_DEL 5
-#define GROUP_SEE  6  
-#define GROUP_ADD  7
-#define GROUP_QIUT 8
-#define GROUP_DEL  9
-#define CHAT_ONE   10
-#define CHAT_MANY  11
-#define SEND_FILE  12
-#define EXIT      -1
-
+#define LOGIN        1
+#define REGISTER     2
+#define FRIEND_SEE   3
+#define FRIEND_ADD   4
+#define FRIEND_DEL   5
+#define GROUP_SEE    6  
+#define GROUP_CREATE 7
+#define GROUP_JOIN   8
+#define GROUP_QIUT   9
+#define GROUP_DEL    10
+#define CHAT_ONE     11
+#define CHAT_MANY    12
+#define SEND_FILE    13
+#define EXIT         -1
 
 #define SIZE_PASS_NAME  30
 #define MAX_CHAR        1024
@@ -53,9 +53,9 @@ typedef struct infor_user
     char password[MAX_CHAR];
     int  statu;//don't foget to change is to 0 when the server begin
     int  socket_id;
-    char friends[MAX_CHAR][MAX_CHAR];//begin from 1
+    char friends[USER_MAX][MAX_CHAR];//begin from 1
     int  friends_num;
-    char group[MAX_CHAR][MAX_CHAR];  //begin from 1
+    char group[GROUP_MAX][MAX_CHAR];  //begin from 1
     char group_num;
 }INFO_USER;
 
@@ -66,20 +66,21 @@ int        m_user_num;
 
 
 
+
+
+
+
+
 /*********************group infor***************************/
 typedef struct infor_group
 {
-    int   user_num;
-    char  user_name[MAX_CHAR][MAX_CHAR];
+    char  group_name[MAX_CHAR];
+    int   member_num;
+    char  member_name[USER_MAX][MAX_CHAR];  //begin from 1
 }INFO_GROUP;
 
-INFO_GROUP   m_infor_group  [GROUP_MAX];
+INFO_GROUP   m_infor_group  [GROUP_MAX]; //begin from 1
 int          m_group_num;
-
-
-
-
-
 
 
 
@@ -108,6 +109,19 @@ typedef struct package{
 }PACK;
 
 
+
+/*****************send*********************/
+PACK m_pack_send   [MAX_CHAR*2];
+int  m_send_num;
+
+
+/**************************************/
+
+
+
+
+
+
 /**********function***************/
 void my_err(const char * err_string,int line);
 void signal_close(int signal_num);
@@ -128,15 +142,6 @@ char* IP = "127.0.0.1";//服务器IP
 short PORT = 10222;//端口号
 typedef struct sockaddr SA;//类型转换
 pthread_mutex_t  mutex;
-
-
-
-/*****************send*********************/
-PACK m_pack_send   [MAX_CHAR*2];
-int  m_send_num;
-
-
-/**************************************/
 
 
 
@@ -472,6 +477,165 @@ void send_mes_to_one(PACK *recv_pack)
 }
 
 
+void group_create(PACK *recv_pack)
+{
+    for(int i=1;i<= m_group_num;i++)
+    {
+        if(strcmp(m_infor_group[i].group_name,recv_pack->data.mes) == 0)
+        {
+            strcpy(recv_pack->data.recv_name,recv_pack->data.send_name);
+            strcpy(recv_pack->data.send_name,"server");
+            recv_pack->data.mes[0] = 1;
+            send_pack(recv_pack);
+            return ;
+        }   
+    }
+    
+    strcpy(m_infor_group[++m_group_num].group_name,recv_pack->data.mes);
+    strcpy(m_infor_group[m_group_num].member_name[++m_infor_group[m_group_num].member_num],recv_pack->data.send_name);
+    int id=find_userinfor(recv_pack->data.send_name);
+    strcpy(m_infor_user[id].group[++m_infor_user[id].group_num],recv_pack->data.mes);
+
+
+    printf("\n\n\033[;32mcreat group : %s  successfully!\033[0m \n\n", recv_pack->data.mes);
+    strcpy(recv_pack->data.recv_name,recv_pack->data.send_name);
+    strcpy(recv_pack->data.send_name,"server");
+
+    recv_pack->data.mes[0] = 2;
+    send_pack(recv_pack);
+}
+
+
+void group_join(PACK *recv_pack)
+{
+    for(int i=1;i<= m_group_num;i++)
+    {
+        if(strcmp(m_infor_group[i].group_name,recv_pack->data.mes) == 0)
+        {
+            strcpy(m_infor_group[i].member_name[++m_infor_group[m_group_num].member_num],recv_pack->data.send_name);
+            int id=find_userinfor(recv_pack->data.send_name);
+            strcpy(m_infor_user[id].group[++m_infor_user[id].group_num],recv_pack->data.mes);
+
+            strcpy(recv_pack->data.recv_name,recv_pack->data.send_name);
+            strcpy(recv_pack->data.send_name,"server");
+            recv_pack->data.mes[0] = 2; 
+            printf("\n\n\033[;32m %s join group : %s  successfully!\033[0m \n\n",recv_pack->data.send_name, recv_pack->data.mes);
+
+            send_pack(recv_pack);
+            return ;
+        }   
+    }
+    
+    strcpy(recv_pack->data.recv_name,recv_pack->data.send_name);
+    strcpy(recv_pack->data.send_name,"server");
+
+    recv_pack->data.mes[0] = 1;
+    send_pack(recv_pack);
+}
+
+
+
+void del_group_from_user(char *username,char *groupname)
+{
+    int id = find_userinfor(username);
+    for(int i = 1;i<=m_infor_user[id].group_num;i++)
+    {
+        if(strcmp(m_infor_user[id].group[i],groupname) == 0)
+        {
+            for(int j = i ;j < m_infor_user[id].group_num ;j++)
+            {
+                strcpy(m_infor_user[id].group[j],m_infor_user[id].group[j+1]);
+            }
+            m_infor_user[id].group_num--;
+        }
+    }
+}
+
+
+
+
+void group_qiut(PACK *recv_pack)
+{
+    del_group_from_user(recv_pack->data.send_name,recv_pack->data.mes);
+
+    for(int i=1 ;i<=m_group_num;i++)
+    {
+        if (strcmp(recv_pack->data.mes,m_infor_group[i].group_name) == 0)
+        {
+            for(int j=1;j<=m_infor_group[i].member_num;j++)
+            {
+                if(strcmp(recv_pack->data.send_name,m_infor_group[i].member_name[j]) == 0)
+                {
+                    for(int k=j;k <m_infor_group[i].member_num;k++)
+                    {
+                        strcpy(m_infor_group[i].member_name[k],m_infor_group[i].member_name[k+1]);
+                    }
+                    m_infor_group[i].member_num--;
+                }
+            }
+        }
+    }
+}
+
+
+
+
+
+
+void group_del_one(int id)
+{
+    for(int i=1;i <= m_infor_group[id].member_num;i++)
+    {
+        del_group_from_user(m_infor_group[id].member_name[i],m_infor_group[id].group_name);
+    }
+
+    for(int i = id ;i < m_group_num;i++)
+    {
+        m_infor_group[i] = m_infor_group[i+1];
+    }
+    m_group_num--;
+}
+
+
+
+
+
+
+
+
+
+void group_del(PACK *recv_pack)
+{
+    for(int i=1;i<=m_group_num;i++)
+    {
+        if(strcmp(m_infor_group[i].group_name,recv_pack->data.mes) == 0)
+        {
+            if(strcmp(m_infor_group[i].member_name[1],recv_pack->data.send_name) == 0)
+            {
+                group_del_one(i);
+                recv_pack->data.mes[0] = 2;
+            }
+            else
+                recv_pack->data.mes[0] = 1;
+        }
+    }
+    strcpy(recv_pack->data.recv_name,recv_pack->data.send_name);
+    strcpy(recv_pack->data.send_name,"server");
+    send_pack(recv_pack);
+
+}
+
+
+
+
+
+
+
+
+
+
+
+
 
 void *deal(void *recv_pack_t)
 {
@@ -495,6 +659,18 @@ void *deal(void *recv_pack_t)
             break;
         case FRIEND_DEL:
             friend_del(recv_pack);
+            break;
+        case GROUP_CREATE:
+            group_create(recv_pack);
+            break;
+        case GROUP_JOIN:
+            group_join(recv_pack);
+            break;
+        case GROUP_QIUT:
+            group_qiut(recv_pack);
+            break;
+        case GROUP_DEL:
+            group_del(recv_pack);
             break;
         case CHAT_ONE:
             send_mes_to_one(recv_pack);

@@ -11,20 +11,21 @@
 #include <string.h>
 #include <signal.h>
 #include <time.h>
- 
-#define LOGIN      1
-#define REGISTER   2
-#define FRIEND_SEE 3
-#define FRIEND_ADD 4
-#define FRIEND_DEL 5
-#define GROUP_SEE  6  
-#define GROUP_ADD  7
-#define GROUP_QIUT 8
-#define GROUP_DEL  9
-#define CHAT_ONE   10
-#define CHAT_MANY  11
-#define SEND_FILE  12
-#define EXIT      -1
+
+#define LOGIN        1
+#define REGISTER     2
+#define FRIEND_SEE   3
+#define FRIEND_ADD   4
+#define FRIEND_DEL   5
+#define GROUP_SEE    6  
+#define GROUP_CREATE 7
+#define GROUP_JOIN   8
+#define GROUP_QIUT   9
+#define GROUP_DEL    10
+#define CHAT_ONE     11
+#define CHAT_MANY    12
+#define SEND_FILE    13
+#define EXIT         -1
 
 #define SIZE_PASS_NAME   30
 #define MAX_PACK_CONTIAN 100
@@ -81,32 +82,6 @@ typedef struct package{
 
 
 
-
-
-
-
-
-/***********************function***********************/
-void my_err(const char * err_string,int line);
-void init();
-
-void sig_close();
-
-int send_login(char username_t [],char password_t []);
-int login();
-int login_menu();
-int send_registe(char username_t[],char password_t[]);
-void registe();
-int main_menu();
-
-
-int sockfd;
-char *IP = "127.0.0.1";
-short PORT = 10222;
-typedef struct sockaddr SA;
-pthread_mutex_t  mutex_local_user;
-
-
 /************************客户端缓冲区**********************/
 /*PACK m_pack_send_friend_see [MAX_CHAR];
 PACK m_pack_send_chat_one   [MAX_CHAR];
@@ -133,6 +108,38 @@ PACK m_pack_recv_send_file    [MAX_PACK_CONTIAN];
 int m_recv_num_friend_see;
 int m_recv_num_chat;
 int m_recv_num_send_file;
+
+
+/****************************************************/
+
+
+int m_flag_group_create;
+int m_flag_group_join ;
+int m_flag_group_del  ;
+
+
+
+/***********************function***********************/
+void my_err(const char * err_string,int line);
+void init();
+
+void sig_close();
+
+int send_login(char username_t [],char password_t []);
+int login();
+int login_menu();
+int send_registe(char username_t[],char password_t[]);
+void registe();
+int main_menu();
+
+
+int sockfd;
+char *IP = "127.0.0.1";
+short PORT = 10222;
+typedef struct sockaddr SA;
+pthread_mutex_t  mutex_local_user;
+
+
 
 
 
@@ -278,6 +285,9 @@ int login_menu()
 
 
 
+
+
+
 /**************************registe******************************/
 
 int send_registe(char username_t[],char password_t[])
@@ -408,6 +418,14 @@ void *clien_recv_thread(void *arg)
             case FRIEND_SEE:
                 m_pack_recv_friend_see[++m_recv_num_friend_see] = pack_t;
                 break;
+            case GROUP_CREATE:
+                m_flag_group_create = pack_t.data.mes[0];
+                break;
+            case GROUP_JOIN:
+                m_flag_group_join   = pack_t.data.mes[0];
+                break;
+            case GROUP_DEL:
+                m_flag_group_del    = pack_t.data.mes[0];
             case CHAT_ONE:
                 m_pack_recv_chat[++m_recv_num_chat]             = pack_t;
                 break;
@@ -432,6 +450,13 @@ void init_clien_pthread()
 
 
 
+
+
+
+
+
+
+
 /********************friend***************************************/
 
 
@@ -446,8 +471,6 @@ void get_status_mes()
         my_err("send",__LINE__);
     }
 }
-
-
 
 
 
@@ -475,14 +498,6 @@ void friends_see()
 }
 
 
-
-
-
-
-
-
-
-
 int judge_same_friend(char add_friend_t[])
 {
     int i;
@@ -493,9 +508,6 @@ int judge_same_friend(char add_friend_t[])
     }
     return 0;
 }
-
-
-
 
 
 
@@ -534,6 +546,9 @@ void del_friend()
     
     get_status_mes();
 }
+
+/*************************end_friend************************************/
+
 
 
 
@@ -602,7 +617,7 @@ void print_mes(int id)
 }
 
 
-
+//less the button to shutdown
 void *show_mes(void *username)
 {
     int id;
@@ -629,7 +644,6 @@ void *show_mes(void *username)
         pthread_mutex_unlock(&mutex_local_user); 
         usleep(1);    
     }
-
 }
 
 
@@ -652,15 +666,92 @@ void send_mes_to_one()
 
 
 
+void group_create()
+{
+    char group_name[MAX_CHAR];
+    printf("please input the group name you want to create:\n");
+    scanf("%s",group_name);
+    send_pack(GROUP_CREATE,m_my_infor.username,"server",group_name);
+    while(!m_flag_group_create);
+    printf("m_flag_group_create=%d\n", m_flag_group_create);
+    if(m_flag_group_create == 2) 
+        printf("create group successfully!\n");
+    else if(m_flag_group_create == 1)
+        printf("this group has been created!\n");
+    m_flag_group_create = 0;
+}
 
 
 
+void group_join()
+{
+
+    char group_name[MAX_CHAR];
+    printf("please input the group name you want to join:\n");
+    scanf("%s",group_name);
+    
+    for(int i=1;i <= m_my_infor.group_num ;i++)
+    {
+        if(strcmp(m_my_infor.group[i],group_name) == 0)
+        {
+            printf("you have join this group!\n");
+            return ;
+        }
+    }
+
+    send_pack(GROUP_JOIN,m_my_infor.username,"server",group_name);
+    while(!m_flag_group_join);
+    printf("m_flag_group_join=%d\n", m_flag_group_join);
+    if(m_flag_group_join == 2) 
+        printf("join group successfully!\n");
+    else if(m_flag_group_join == 1)
+        printf("there is no group named %s\n",group_name);
+    m_flag_group_join = 0;
+}
 
 
+void group_qiut()
+{
+    char group_name[MAX_CHAR];
+    printf("please input the group name you want to qiut:\n");
+    scanf("%s",group_name);
+    
+    for(int i=1;i <= m_my_infor.group_num ;i++)
+    {
+        if(strcmp(m_my_infor.group[i],group_name) == 0)
+        {
+            send_pack(GROUP_QIUT,m_my_infor.username,"server",group_name);
+            printf("quit group %s successfully!\n",group_name);
+            return ;
+        }
+    }
+    
+    printf("you did't join this group!\n");
+}
 
 
-
-
+void group_del()
+{
+     char group_name[MAX_CHAR];
+    printf("please input the group name you want to delete:\n");
+    scanf("%s",group_name);
+    for(int i=1;i <= m_my_infor.group_num ;i++)
+    {
+        if(strcmp(m_my_infor.group[i],group_name) == 0)
+        {
+            send_pack(GROUP_DEL,m_my_infor.username,"server",group_name);
+            while(!m_flag_group_del);
+            printf("m_flag_group_del=%d\n", m_flag_group_del);
+            if(m_flag_group_del == 2) 
+                printf("delete group successfully!\n");
+            else if(m_flag_group_del == 1)
+                printf("you isn't the owner of group %s\n",group_name);
+            return ;
+        }
+    }
+    
+    printf("you did't join this group!\n");
+}
 
 
 
@@ -687,7 +778,7 @@ int main_menu()
         printf("\t\t*        2.add    friends       *\n");
         printf("\t\t*        3.delete friends       *\n");
         printf("\t\t*        4.show   group         *\n");
-        printf("\t\t*        5.add    group         *\n");
+        printf("\t\t*        5.create group         *\n");
         printf("\t\t*        6.join   group         *\n");
         printf("\t\t*        7.quit   group         *\n");
         printf("\t\t*        8.delete group         *\n");
@@ -696,7 +787,7 @@ int main_menu()
         printf("\t\t*        11.send  file          *\n");
         printf("\t\t*        12.message  box        *\n");
         printf("\t\t*        0.exit                 *\n");
-        printf("\t\t*******************************\n");
+        printf("\t\t******************************* *\n");
         printf("\t\tchoice：");
         scanf("%d",&chioce);
         switch(chioce)
@@ -714,19 +805,19 @@ int main_menu()
                 group_see();
                 break;
             case 5:
-
+                group_create();
                 break;
             case 6:
-
+                group_join();
                 break;
             case 7:
-
+                group_qiut();
                 break;
             case 8:
-                send_mes_to_one();
+                group_del();
                 break;
             case 9:
-
+                send_mes_to_one();
                 break;
             case 10:
 
