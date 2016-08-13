@@ -116,7 +116,7 @@ int m_recv_num_send_file;
 int m_flag_group_create;
 int m_flag_group_join ;
 int m_flag_group_del  ;
-
+int m_flag_print_mes;
 
 
 /***********************function***********************/
@@ -568,6 +568,16 @@ void del_friend()
 
 /***********************group***********************************/
 
+int judge_same_group(char *group_name)
+{
+    int i;
+    for(i=1;i<=m_my_infor.group_num;i++)
+    {
+        if(strcmp(m_my_infor.group[i],group_name) == 0)
+            return 1;
+    }
+    return 0;
+}
 
 
 
@@ -586,7 +596,7 @@ void group_see()
 
 
 
-void send_mes(char mes_recv_name[])
+void send_mes(char mes_recv_name[],int type)
 {
     PACK pack_send_mes;
     char mes[MAX_CHAR];
@@ -597,7 +607,8 @@ void send_mes(char mes_recv_name[])
         time(&timep);
         memset(mes,0,sizeof(mes));
         printf("\n%s",ctime(&timep) );
-        printf("%s->",m_my_infor.username);
+        if(type == CHAT_ONE)
+            printf("%s->",m_my_infor.username);
         fgets(mes,MAX_CHAR,stdin);
         while(mes[0] == 10)
             fgets(mes,MAX_CHAR,stdin);
@@ -606,14 +617,30 @@ void send_mes(char mes_recv_name[])
         
         //printf("\t%s\n%s\n", m_my_infor.username,ctime(&timep),mes);
 
-        send_pack(CHAT_ONE,m_my_infor.username,mes_recv_name,mes);
+        send_pack(type,m_my_infor.username,mes_recv_name,mes);
     }
+    m_flag_print_mes = EXIT;
 }
 
 void print_mes(int id)
 {
-    printf("\033[40;42m%s\033[0m\t%s\n",m_pack_recv_chat[id].data.send_name,ctime(&m_pack_recv_chat[id].data.time));
-    printf("%s\n", m_pack_recv_chat[id].data.mes);
+    char group_print_name[MAX_CHAR];
+    memset(group_print_name,0,sizeof(group_print_name));
+    if(m_pack_recv_chat[id].type == CHAT_ONE)
+    {
+        printf("\033[40;42m%s\033[0m\t%s\n",m_pack_recv_chat[id].data.send_name,ctime(&m_pack_recv_chat[id].data.time));
+        printf("%s\n", m_pack_recv_chat[id].data.mes);
+    }
+    else
+    {
+        for(int i=0;i<SIZE_PASS_NAME;i++)
+        {
+            group_print_name[i] = m_pack_recv_chat[id].data.mes[i];
+        }
+        printf("\033[40;42m%s\033[0m\t%s\n",group_print_name,ctime(&m_pack_recv_chat[id].data.time));
+        printf("%s\n", m_pack_recv_chat[id].data.mes+SIZE_PASS_NAME);
+    }
+   
 }
 
 
@@ -624,9 +651,11 @@ void *show_mes(void *username)
     char *user_name = (char *)username;
     while(1)
     {
+        if (m_flag_print_mes == EXIT)
+            break;
         pthread_mutex_lock(&mutex_local_user); 
         id = 0;
-        for(int i = m_recv_num_chat ;i >= 1; i--)
+        for(int i = 1 ;i <= m_recv_num_chat; i++)
         {
             if(strcmp(m_pack_recv_chat[i].data.send_name,user_name) == 0)
             {
@@ -652,7 +681,8 @@ void send_mes_to_one()
 {
     pthread_t pid;
     char mes_recv_name[MAX_CHAR];
-    friends_see();
+    friends_see();//print friend list !
+
     printf("please input the name you want to chat\n");
     scanf("%s",mes_recv_name);
     if (!judge_same_friend(mes_recv_name))
@@ -660,9 +690,19 @@ void send_mes_to_one()
         printf("sorry,you don't have the friend named !%s\n",mes_recv_name);
         return ;
     }
+    m_flag_print_mes = 1;
+
     pthread_create(&pid,NULL,show_mes,(void *)mes_recv_name);
-    send_mes(mes_recv_name);
+    send_mes(mes_recv_name,CHAT_ONE);
 }
+
+
+
+
+
+
+
+
 
 
 
@@ -754,6 +794,27 @@ void group_del()
 }
 
 
+void send_mes_to_group()
+{
+    pthread_t pid;
+    char mes_recv_group_name[MAX_CHAR];
+    group_see();
+    printf("please input the group you want to chat\n");
+    scanf("%s",mes_recv_group_name);
+    if (!judge_same_group(mes_recv_group_name))
+    {
+        printf("sorry,you don't have the group named !%s\n",mes_recv_group_name);
+        return ;
+    }
+
+    m_flag_print_mes = 1;
+    
+    pthread_create(&pid,NULL,show_mes,(void *)mes_recv_group_name);
+    send_mes(mes_recv_group_name,CHAT_MANY);
+}
+
+
+
 
 
 
@@ -820,7 +881,7 @@ int main_menu()
                 send_mes_to_one();
                 break;
             case 10:
-
+                send_mes_to_group();
                 break;
             case 11:
                 massege();

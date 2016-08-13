@@ -178,9 +178,7 @@ void send_pack(PACK *pack_send_pack_t)
     pthread_mutex_lock(&mutex);  
     memcpy(&(m_pack_send[m_send_num++]),pack_send_pack_t,sizeof(PACK));
     pthread_mutex_unlock(&mutex);  
-    free(pack_send_pack_t);
 }
-
 
 
 
@@ -201,7 +199,33 @@ void print_send_pack()
     }
 }
 
+void print_infor_group()
+{
+    for(int i=1;i<=m_group_num;i++)
+    {
+        printf("\n\n********%d*********\n", i);
+        printf("group_name  :%s\n", m_infor_group[i].group_name);
+        printf("group_num   :%d\n", m_infor_group[i].member_num);
+        for(int j=1 ;j<=m_infor_group[i].member_num;j++)
+        printf("*%s\n", m_infor_group[i].member_name[j]);
+        printf("***********************\n\n\n");
+    }
+}
 
+
+void print_infor_user()
+{
+    for(int i=1;i<=m_user_num;i++)
+    {
+        printf("\n\n*****user***%d*********\n", i);
+        printf("user_name  :%s\n", m_infor_user[i].username);
+        printf("user_num   :%d\n", m_infor_user[i].group_num);
+        for(int j=1 ;j<=m_infor_user[i].group_num;j++)
+        printf("*%s\n", m_infor_user[i].group[j]);
+        printf("***********************\n\n\n");
+
+    }
+}
 
 
 
@@ -278,6 +302,7 @@ void login(PACK *recv_pack)
     recv_pack->data.recv_fd = recv_pack->data.send_fd;
     recv_pack->data.send_fd = listenfd;
     send_pack(recv_pack);
+    free(recv_pack);
     
 
 }
@@ -330,6 +355,7 @@ void registe(PACK *recv_pack)
     recv_pack->data.recv_fd = recv_pack->data.send_fd;
     recv_pack->data.send_fd = listenfd;
     send_pack(recv_pack);
+    free(recv_pack);
 
     
 }
@@ -407,6 +433,7 @@ void send_statu(PACK *recv_pack)
     recv_pack->data.send_fd = listenfd;
 
     send_pack(recv_pack);
+    free(recv_pack);
 }
 
 
@@ -474,7 +501,15 @@ void friend_del(PACK *recv_pack)
 void send_mes_to_one(PACK *recv_pack)
 {
     send_pack(recv_pack);
+    free(recv_pack);
 }
+
+
+
+
+
+
+
 
 
 void group_create(PACK *recv_pack)
@@ -487,6 +522,7 @@ void group_create(PACK *recv_pack)
             strcpy(recv_pack->data.send_name,"server");
             recv_pack->data.mes[0] = 1;
             send_pack(recv_pack);
+            free(recv_pack);
             return ;
         }   
     }
@@ -503,6 +539,7 @@ void group_create(PACK *recv_pack)
 
     recv_pack->data.mes[0] = 2;
     send_pack(recv_pack);
+    free(recv_pack);
 }
 
 
@@ -512,16 +549,18 @@ void group_join(PACK *recv_pack)
     {
         if(strcmp(m_infor_group[i].group_name,recv_pack->data.mes) == 0)
         {
-            strcpy(m_infor_group[i].member_name[++m_infor_group[m_group_num].member_num],recv_pack->data.send_name);
+            strcpy(m_infor_group[i].member_name[++m_infor_group[i].member_num],recv_pack->data.send_name);
             int id=find_userinfor(recv_pack->data.send_name);
             strcpy(m_infor_user[id].group[++m_infor_user[id].group_num],recv_pack->data.mes);
 
             strcpy(recv_pack->data.recv_name,recv_pack->data.send_name);
             strcpy(recv_pack->data.send_name,"server");
             recv_pack->data.mes[0] = 2; 
-            printf("\n\n\033[;32m %s join group : %s  successfully!\033[0m \n\n",recv_pack->data.send_name, recv_pack->data.mes);
-
+            printf("\n\n\033[;32m %s join group : %s  successfully!\033[0m \n\n",recv_pack->data.recv_name, recv_pack->data.mes);
+            print_infor_group();
+            print_infor_user();
             send_pack(recv_pack);
+            free(recv_pack);
             return ;
         }   
     }
@@ -531,6 +570,7 @@ void group_join(PACK *recv_pack)
 
     recv_pack->data.mes[0] = 1;
     send_pack(recv_pack);
+    free(recv_pack);
 }
 
 
@@ -571,6 +611,7 @@ void group_qiut(PACK *recv_pack)
                         strcpy(m_infor_group[i].member_name[k],m_infor_group[i].member_name[k+1]);
                     }
                     m_infor_group[i].member_num--;
+                     print_infor_group();
                 }
             }
         }
@@ -614,6 +655,7 @@ void group_del(PACK *recv_pack)
             {
                 group_del_one(i);
                 recv_pack->data.mes[0] = 2;
+                printf("\n\n\033[;32m delete group : %s  successfully!\033[0m \n\n",recv_pack->data.mes);
             }
             else
                 recv_pack->data.mes[0] = 1;
@@ -622,10 +664,55 @@ void group_del(PACK *recv_pack)
     strcpy(recv_pack->data.recv_name,recv_pack->data.send_name);
     strcpy(recv_pack->data.send_name,"server");
     send_pack(recv_pack);
+    //print_infor_group();
+    free(recv_pack);
 
 }
 
 
+
+int find_groupinfor(char groupname_t[])
+{
+    int i;
+    if(m_group_num == 0)  return 0;
+    for(i=1;i<=m_group_num;i++)
+    {
+        if(strcmp(m_infor_group[i].group_name,groupname_t) == 0)
+            return i;
+    }
+    if(i == m_group_num+1) 
+        return 0;
+}
+
+
+
+
+void send_mes_to_group(PACK *recv_pack)
+{
+
+    int id = find_groupinfor(recv_pack->data.recv_name);
+    int len_mes = strlen(recv_pack->data.mes);
+    
+    for(int i=len_mes;i>=0;i--){
+        recv_pack->data.mes[i+SIZE_PASS_NAME] = recv_pack->data.mes[i];
+    }
+    
+    for(int i=0;i<SIZE_PASS_NAME;i++){
+        recv_pack->data.mes[i] = recv_pack->data.send_name[i];
+    }
+
+
+    strcpy(recv_pack->data.send_name,recv_pack->data.recv_name);
+
+
+    for(int i; i<=m_infor_group[id].member_num;i++)
+    {
+        strcpy(recv_pack->data.recv_name,m_infor_group[id].member_name[i]);
+        send_pack(recv_pack);
+    }
+    
+    free(recv_pack);
+}
 
 
 
@@ -676,7 +763,7 @@ void *deal(void *recv_pack_t)
             send_mes_to_one(recv_pack);
             break;
         case CHAT_MANY:
-
+            send_mes_to_group(recv_pack);
             break;
         case SEND_FILE:
 
@@ -838,6 +925,7 @@ int main()
                 recv_t.data.send_fd = events[i].data.fd;
                 
                 printf("\n\n\n\033[;31m ***PACK***\033[0m\n");
+                printf("\033[;31m*\033[0m type     : %d\n", recv_t.type);
                 printf("\033[;31m*\033[0m send_name: %s\n", recv_t.data.send_name);
                 printf("\033[;31m*\033[0m recv_name: %s\n",recv_t.data.recv_name);
                 printf("\033[;31m*\033[0m mes      : %s\n", recv_t.data.mes);
