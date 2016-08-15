@@ -24,7 +24,8 @@
 #define GROUP_DEL    10
 #define CHAT_ONE     11
 #define CHAT_MANY    12
-#define SEND_FILE    13
+#define FILE_SEND    13
+#define FILE_RECV    14
 #define EXIT         -1
 
 #define SIZE_PASS_NAME   30
@@ -122,9 +123,7 @@ int m_flag_print_mes;
 /***********************function***********************/
 void my_err(const char * err_string,int line);
 void init();
-
 void sig_close();
-
 int send_login(char username_t [],char password_t []);
 int login();
 int login_menu();
@@ -217,6 +216,7 @@ int send_login(char username_t[],char password_t[])
     if(recv(sockfd,&recv_login_t,sizeof(PACK),0) < 0){
         my_err("recv",__LINE__);
     }
+    printf("jijimei????\n");
     login_judge_flag = recv_login_t.data.mes[0] - 48;
     return login_judge_flag;
 }
@@ -303,6 +303,9 @@ int send_registe(char username_t[],char password_t[])
     send_registe_flag = recv_registe_t.data.mes[0] - 48;
     return send_registe_flag;
 }
+
+
+
 
 void registe()
 {
@@ -411,7 +414,18 @@ void *clien_recv_thread(void *arg)
         if(recv(sockfd,&pack_t,sizeof(PACK),0) < 0){
             my_err("recv",__LINE__);
         }
+        //for(int i=1;i <= )
         pthread_mutex_lock(&mutex_local_user); 
+        
+        for(int i=1 ;i<= m_my_infor.friends_num;i++)
+        {
+            if(strcmp(m_my_infor.friends[i].name,pack_t.data.send_name) == 0)
+            {
+                m_my_infor.friends[i].mes_num++;
+                break;
+            }
+        }
+
         switch(pack_t.type)
         {
             printf("clien_recv_thread:%d\n", pack_t.type);
@@ -436,7 +450,8 @@ void *clien_recv_thread(void *arg)
                 m_pack_recv_send_file[++m_recv_num_send_file]   = pack_t;
                 break;
         }
-        pthread_mutex_unlock(&mutex_local_user);  
+        pthread_mutex_unlock(&mutex_local_user); 
+        usleep(1); 
     }
 }
 
@@ -486,10 +501,18 @@ void friends_see()
         switch(m_my_infor.friends[i].statu)
         {
             case ONLINE:
-                printf("ID:%d \033[;32m%s\033[0m[ONLINE]\n", i,m_my_infor.friends[i].name);
+                printf("ID:%d \033[;32m%s\033[0m[ONLINE] ", i,m_my_infor.friends[i].name);
+                if(m_my_infor.friends[i].mes_num)
+                    printf("\033[;33m%d messages\033[0m\n", m_my_infor.friends[i].mes_num);
+                else 
+                    printf("\n");
                 break;
             case DOWNLINE:
-                printf("ID:%d \033[;31m%s\033[0m[DOWNLINE]\n", i,m_my_infor.friends[i].name);
+                printf("ID:%d \033[;31m%s\033[0m[DOWNLINE] ", i,m_my_infor.friends[i].name);
+                if(m_my_infor.friends[i].mes_num)
+                    printf("\033[;33m%d messages\033[0m\n", m_my_infor.friends[i].mes_num);
+                else 
+                    printf("\n");
                 break;
         }
     }
@@ -504,7 +527,7 @@ int judge_same_friend(char add_friend_t[])
     for(i=1;i<=m_my_infor.friends_num;i++)
     {
         if(strcmp(m_my_infor.friends[i].name,add_friend_t) == 0)
-            return 1;
+            return i;
     }
     return 0;
 }
@@ -622,6 +645,8 @@ void send_mes(char mes_recv_name[],int type)
     m_flag_print_mes = EXIT;
 }
 
+
+
 void print_mes(int id)
 {
     char group_print_name[MAX_CHAR];
@@ -680,18 +705,19 @@ void *show_mes(void *username)
 void send_mes_to_one()
 {
     pthread_t pid;
+    int id;
     char mes_recv_name[MAX_CHAR];
     friends_see();//print friend list !
 
     printf("please input the name you want to chat\n");
     scanf("%s",mes_recv_name);
-    if (!judge_same_friend(mes_recv_name))
+    if (!(id=judge_same_friend(mes_recv_name)))
     {
         printf("sorry,you don't have the friend named !%s\n",mes_recv_name);
         return ;
     }
     m_flag_print_mes = 1;
-
+    m_my_infor.friends[id].mes_num = 0;
     pthread_create(&pid,NULL,show_mes,(void *)mes_recv_name);
     send_mes(mes_recv_name,CHAT_ONE);
 }
@@ -817,6 +843,39 @@ void send_mes_to_group()
 
 
 
+void send_file_send(int begin_location,int file_size,char *file_path,char *recv_name)
+{
+    int fd;
+    char mes[MAX_CHAR*2];
+
+    if((fd = open(file_path,O_RDONLY)) == -1)
+    {
+        my_err("open",__LINE__);
+        return ;
+    }
+
+    bzero(mes, MAX_CHAR*2); 
+
+    for(int i=0; i < SIZE_PASS_NAME;i++)
+    {
+        mes[i] = file_path[i];
+    }
+
+    // 每读取一段数据，便将其发送给客户端，循环直到文件读完为止 
+    while((length = read(fd  ,mes+SIZE_PASS_NAME  ,MAX_CHAR*2 - SIZE_PASS_NAME)) > 0) 
+    {
+        send_pack(FILE_SEND,m_my_infor.username,recv_name,char *mes)
+        bzero(mes, MAX_CHAR*2); 
+    } 
+    // 关闭文件 
+    fclose(fp);
+
+}
+
+
+
+
+
 
 
 
@@ -884,29 +943,13 @@ int main_menu()
                 send_mes_to_group();
                 break;
             case 11:
-                massege();
+                send_file();
             default:
                 break;
         }
     }while(chioce!=0);
     return 0;
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 

@@ -24,8 +24,10 @@
 #define GROUP_DEL    10
 #define CHAT_ONE     11
 #define CHAT_MANY    12
-#define SEND_FILE    13
+#define FILE_SEND    13
+#define FILE_RECV    14
 #define EXIT         -1
+
 
 #define SIZE_PASS_NAME  30
 #define MAX_CHAR        1024
@@ -87,6 +89,19 @@ int          m_group_num;
 
 
 
+/******************file_infor************************************/
+
+typedef struct file_infor
+{
+    char  file_name[MAX_CHAR];
+    char  file_send_name[MAX_CHAR];
+    char  file_recv_name[MAX_CHAR];
+    int   file_size;
+    int   file_size_now;
+}INFO_FILE;
+
+INFO_FILE    m_infor_file  [GROUP_MAX]; //begin from 1
+int          m_file_num;
 
 
 
@@ -277,6 +292,7 @@ void login(PACK *recv_pack)
     else if (m_infor_user[id].statu == ONLINE)
     {
         login_flag[0] = '3';
+
     }
     else if(strcmp(recv_pack->data.mes,m_infor_user[id].password) == 0){//the password is not crrect
         login_flag[0] = '1';
@@ -714,12 +730,23 @@ void send_mes_to_group(PACK *recv_pack)
     free(recv_pack);
 }
 
+int get_file_size(char *file_name)
+{
+    FILE *fp = fopen(filename, "r"); 
+    fseek(fp, 0, SEEK_END);
+    file_size=ftell(fp);//得到文件大小
+    
+    // printf("file_size=%d",file_size);
+    
+    send(sockfd,&file_size,sizeof(int),0);// 把文件大小数据发送
+    fseek(fp, 0, SEEK_SET);
+    close(fp);
+}
 
+void file_recv()
+{
 
-
-
-
-
+}
 
 
 
@@ -765,8 +792,8 @@ void *deal(void *recv_pack_t)
         case CHAT_MANY:
             send_mes_to_group(recv_pack);
             break;
-        case SEND_FILE:
-
+        case FILE_SEND:
+            file_recv(recv_pack);
             break;
         case EXIT:
 
@@ -815,11 +842,13 @@ void *serv_send_thread(void *arg)
                     my_err("send",__LINE__);
                 }
                 printf("\n\n\033[;42m*****send pack****\033[0m\n");
-                printf("\033[;42m*\033[0m from: %s\n",m_pack_send[i].data.recv_name);
-                printf("\033[;42m*\033[0m to  : %s\n",m_pack_send[i].data.send_name);
-                printf("\033[;42m*\033[0m mes : %s\n",m_pack_send[i].data.mes);
+                printf("\033[;42m*\033[0m from    : %s\n",m_pack_send[i].data.send_name);
+                printf("\033[;42m*\033[0m to      : %s\n",m_pack_send[i].data.recv_name);
+                printf("\033[;42m*\033[0m mes     : %s\n",m_pack_send[i].data.mes);
+                printf("\033[;42m*\033[0m recv_fd : %d\n",m_pack_send[i].data.recv_fd);
                 m_send_num-- ;
                 printf("\033[;42m*\033[0m pack left Now is:%d\n\n", m_send_num);
+                
                 for(int j = i;j<=m_send_num&&m_send_num;j++)
                 {
                     m_pack_send[j] = m_pack_send[j+1];
