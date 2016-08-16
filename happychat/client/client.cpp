@@ -4,6 +4,9 @@
 #include <pthread.h>
 #include <sys/socket.h>
 #include <sys/epoll.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <stdlib.h>
@@ -12,25 +15,32 @@
 #include <signal.h>
 #include <time.h>
 
-#define LOGIN        1
-#define REGISTER     2
-#define FRIEND_SEE   3
-#define FRIEND_ADD   4
-#define FRIEND_DEL   5
-#define GROUP_SEE    6  
-#define GROUP_CREATE 7
-#define GROUP_JOIN   8
-#define GROUP_QIUT   9
-#define GROUP_DEL    10
-#define CHAT_ONE     11
-#define CHAT_MANY    12
-#define FILE_SEND    13
-#define FILE_RECV    14
-#define EXIT         -1
+/*****************same with server**********************/
+#define LOGIN                    1
+#define REGISTER                 2
+#define FRIEND_SEE               3
+#define FRIEND_ADD               4
+#define FRIEND_DEL               5
+#define GROUP_SEE                6  
+#define GROUP_CREATE             7
+#define GROUP_JOIN               8
+#define GROUP_QIUT               9
+#define GROUP_DEL                10
+#define CHAT_ONE                 11
+#define CHAT_MANY                12
+#define FILE_SEND_BEGIN          13
+#define FILE_SEND_BEGIN_RP       14
+#define FILE_SEND_STOP_RP        15
+#define FILE_RECV_RE             16
+#define FILE_SEND                17
+#define FILE_RECV                18
+#define EXIT                     -1
+
 
 #define SIZE_PASS_NAME   30
 #define MAX_PACK_CONTIAN 100
 #define MAX_CHAR         1024
+#define NUM_MAX_DIGIT    10
 
 #define DOWNLINE   0
 #define ONLINE     1
@@ -68,12 +78,12 @@ USER_INFOR m_my_infor;
 
 /******************be sure same with server*******************************/
 typedef struct datas{
-    char send_name[MAX_CHAR];
-    char recv_name[MAX_CHAR];
-    int send_fd;
-    int recv_fd;
-    time_t time;
-    char mes[MAX_CHAR*2];
+    char    send_name[MAX_CHAR];
+    char    recv_name[MAX_CHAR];
+    int     send_fd;
+    int     recv_fd;
+    time_t  time;
+    char    mes[MAX_CHAR*2];
 }DATA;
 
 typedef struct package{
@@ -103,13 +113,13 @@ int  m_send_num;
 PACK m_pack_recv_friend_see   [MAX_PACK_CONTIAN];
 PACK m_pack_recv_chat         [MAX_PACK_CONTIAN];
 PACK m_pack_recv_send_file    [MAX_PACK_CONTIAN];
-
+PACK m_pack_recv_file_mes     [MAX_PACK_CONTIAN];
 
 
 int m_recv_num_friend_see;
 int m_recv_num_chat;
 int m_recv_num_send_file;
-
+int m_recv_num_file_mes;
 
 /****************************************************/
 
@@ -137,6 +147,23 @@ char *IP = "127.0.0.1";
 short PORT = 10222;
 typedef struct sockaddr SA;
 pthread_mutex_t  mutex_local_user;
+
+
+
+
+void print_file_mes()
+{
+    for(int i=1 ;i<=5;i++)
+    {
+        printf("hahahahahaha*****\n");
+        printf("%s\n", m_pack_recv_file_mes[i].data.send_name);
+        printf("%s",m_pack_recv_file_mes[i].data.recv_name);
+        for(int j=0;j<=5;j++)
+            printf("%d\n\n",m_pack_recv_file_mes[i].data.mes[j]);
+
+    }
+}
+
 
 
 
@@ -191,6 +218,24 @@ void send_pack(int type,char *send_name,char *recv_name,char *mes)
         my_err("send",__LINE__);
     }
 }
+
+
+
+void send_pack_memcpy(int type,char *send_name,char *recv_name,char *mes)
+{
+    PACK pack_send_pack;
+    time_t timep;
+    pack_send_pack.type = type;
+    strcpy(pack_send_pack.data.send_name,send_name);
+    strcpy(pack_send_pack.data.recv_name,recv_name);
+    memcpy(pack_send_pack.data.mes,mes,MAX_CHAR*2); 
+    time(&timep);
+    pack_send_pack.data.time = timep;
+    if(send(sockfd,&pack_send_pack,sizeof(PACK),0) < 0){
+        my_err("send",__LINE__);
+    }
+}
+
 
 
 
@@ -395,9 +440,107 @@ void *deal_statu(void *arg)
             change_statu(m_pack_recv_friend_see[i]);
         }
         m_recv_num_friend_see = 0;
-        pthread_mutex_unlock(&mutex_local_user);  
+        pthread_mutex_unlock(&mutex_local_user); 
+        usleep(1); 
     }
 }
+
+
+
+
+
+
+
+
+
+
+void send_file_send(int begin_location,char *file_path)
+{
+    int fd;
+    int length;
+    int file_size;
+    int sum = begin_location;
+    char mes[MAX_CHAR*2];
+    printf("\n\nsending the file.........\n");
+    
+
+    if((fd = open(file_path,O_RDONLY)) == -1)
+    {
+        my_err("open",__LINE__);
+        return ;
+    }
+    file_size=lseek(fd, 0, SEEK_END);
+    
+    printf("file_size=%d",file_size);
+    lseek(fd ,begin_location ,SEEK_SET);
+
+    bzero(mes, MAX_CHAR*2); 
+
+    // 每读取一段数据，便将其发送给客户端，循环直到文件读完为止 
+    while((length = read(fd  ,mes+NUM_MAX_DIGIT ,MAX_CHAR*2 - NUM_MAX_DIGIT)) > 0) 
+    {
+        sum += length;
+        printf("length = %d\n", length);
+        int digit = 0;
+        while(length != 0)
+        {   
+            mes[digit++] = length%10;
+            length /= 10;
+        }
+        mes[digit]  = -1;
+        printf("have sended : %d    %d b  \n",(int)((double)sum/file_size*100),sum);
+        printf("%s\n", file_path);
+        send_pack_memcpy(FILE_SEND,m_my_infor.username,file_path,mes);
+        
+        if(sum == file_size)  
+            break;
+        bzero(mes, MAX_CHAR*2); 
+        usleep(100000);
+    } 
+    // 关闭文件 
+    close(fd);
+}
+
+
+
+
+
+
+
+void *pthread_send_file(void *mes_t)
+{
+    char *mes = (char *)mes_t;
+    int begin_location = 0;
+    char file_name[MAX_CHAR];
+    printf("\033[;31m \nfunction:pthread_send_file\033[0m \n");
+    for(int i=0 ;i<NUM_MAX_DIGIT ;i++)
+    {
+        if(mes[i] == -1)  
+            break;
+        int t1 = 1;
+        for(int l=0;l<i;l++)
+            t1*=10;
+        begin_location += (int)mes[i]*t1;
+
+    }
+    printf("pthread_send_file:%d\n",begin_location);
+    strcpy(file_name,mes+NUM_MAX_DIGIT);
+    printf("sdfa:%s\n", file_name);
+    send_file_send(begin_location,file_name);
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -409,6 +552,7 @@ void *clien_recv_thread(void *arg)
 {
     int i;
     PACK pack_t;
+    pthread_t pid_send_file;
     while(1)
     {
         if(recv(sockfd,&pack_t,sizeof(PACK),0) < 0){
@@ -446,9 +590,19 @@ void *clien_recv_thread(void *arg)
             case CHAT_MANY:
                 m_pack_recv_chat[++m_recv_num_chat]             = pack_t;
                 break;
-            case SEND_FILE:
-                m_pack_recv_send_file[++m_recv_num_send_file]   = pack_t;
+            //case SEND_FILE:
+              //  m_pack_recv_send_file[++m_recv_num_send_file]   = pack_t;
+                //break;
+            case FILE_SEND_BEGIN_RP:
+                 pthread_create(&pid_send_file,NULL,pthread_send_file,(void *)pack_t.data.mes);
                 break;
+            case FILE_SEND_STOP_RP:
+                printf("*******jijiijijij********8");
+                m_pack_recv_file_mes[++m_recv_num_file_mes]             = pack_t;
+                printf("  ji:%d\n", m_recv_num_file_mes);
+                break;
+
+
         }
         pthread_mutex_unlock(&mutex_local_user); 
         usleep(1); 
@@ -540,7 +694,11 @@ void add_friend()
     
     printf("please input the name of friend you want to add:\n");
     scanf("%s",add_friend_t);
-
+    if(strcmp(add_friend_t,m_my_infor.username) == 0)
+    {
+        printf("you can't add youself to be your friend!\n");
+        return;
+    }
     if(judge_same_friend(add_friend_t))
     {
         printf("you already have same friends!\n");
@@ -798,7 +956,7 @@ void group_qiut()
 
 void group_del()
 {
-     char group_name[MAX_CHAR];
+    char group_name[MAX_CHAR];
     printf("please input the group name you want to delete:\n");
     scanf("%s",group_name);
     for(int i=1;i <= m_my_infor.group_num ;i++)
@@ -818,6 +976,8 @@ void group_del()
     
     printf("you did't join this group!\n");
 }
+
+
 
 
 void send_mes_to_group()
@@ -843,33 +1003,146 @@ void send_mes_to_group()
 
 
 
-void send_file_send(int begin_location,int file_size,char *file_path,char *recv_name)
+
+
+
+
+
+
+
+/**********************send file********************************/
+
+int get_file_size(char *file_name)
 {
     int fd;
-    char mes[MAX_CHAR*2];
-
-    if((fd = open(file_path,O_RDONLY)) == -1)
+    int len;
+    if((fd = open(file_name,O_RDONLY)) == -1)
     {
         my_err("open",__LINE__);
+        return 0;
+    }
+    len = lseek(fd, 0, SEEK_END);
+    close(fd);
+    return len;
+}
+
+
+
+
+void send_file()
+{
+    char  recv_name[MAX_CHAR];
+    char  file_path[MAX_CHAR];
+    int   file_size_t;
+    char  mes_t[MAX_CHAR];
+
+    printf("please input the friend name:\n");
+    scanf("%s",recv_name);
+
+    int id = judge_same_friend(recv_name);
+    if(id == 0)
+    {
+        printf("you don't hava this friend!\n");
+        return ;
+    }
+    printf("please input the path of file you want to send :\n");
+    scanf("%s",file_path);
+    
+    file_size_t = get_file_size(file_path);
+    printf("file_size :%d\n", file_size_t);
+
+    if(file_size_t == 0)
+    {
+        printf("please input creact file path\n");
         return ;
     }
 
-    bzero(mes, MAX_CHAR*2); 
-
-    for(int i=0; i < SIZE_PASS_NAME;i++)
-    {
-        mes[i] = file_path[i];
+    int digit = 0;
+    while(file_size_t != 0)
+    {   
+        mes_t[digit++] = file_size_t%10;
+        file_size_t /= 10;
     }
-
-    // 每读取一段数据，便将其发送给客户端，循环直到文件读完为止 
-    while((length = read(fd  ,mes+SIZE_PASS_NAME  ,MAX_CHAR*2 - SIZE_PASS_NAME)) > 0) 
+    mes_t[digit]  = -1;
+    printf("file_size1:");
+    for(int j=0 ;j<=NUM_MAX_DIGIT;j++)
     {
-        send_pack(FILE_SEND,m_my_infor.username,recv_name,char *mes)
-        bzero(mes, MAX_CHAR*2); 
-    } 
-    // 关闭文件 
-    fclose(fp);
+        if(mes_t[j] == '\0')
+            break;
+        printf("%c ",mes_t[j]+48);
+    }
+    
+    for(int i=0 ;i< SIZE_PASS_NAME ;i++)
+    {
+        mes_t[NUM_MAX_DIGIT+i] = file_path[i];
+    }
+    printf("file_path:%s\n",mes_t+ NUM_MAX_DIGIT);
 
+    send_pack_memcpy(FILE_SEND_BEGIN,m_my_infor.username,recv_name,mes_t);
+
+}
+
+
+
+
+void deal_file_mes(int id)
+{
+    char chioce[10];
+    if(m_pack_recv_file_mes[id].type == FILE_SEND_STOP_RP)
+    {
+        
+
+        int begin_location = 0;
+        for(int i=0 ;i<NUM_MAX_DIGIT ;i++)
+        {
+            if( m_pack_recv_file_mes[id].data.mes[i] == -1)  
+                break;
+            printf("%d\n\n",m_pack_recv_file_mes[id].data.mes[i]);
+            int t1 = 1;
+            for(int l=0;l<i;l++)
+                t1*=10;
+            begin_location += (int)m_pack_recv_file_mes[id].data.mes[i] * t1;
+
+        }
+
+
+
+        int file_size_t = get_file_size(m_pack_recv_file_mes[id].data.send_name);
+        printf("the file %s send failed ,have sended  %d,do you want send again?\n", m_pack_recv_file_mes[id].data.send_name,(int)((double)begin_location/file_size_t*100));
+        printf("y/n :");
+        scanf("%s",chioce);
+        
+        
+
+        if(chioce[0] != 'Y' && chioce[0] != 'y')
+        {
+            pthread_mutex_lock(&mutex_local_user); 
+            m_recv_num_file_mes--;
+            for(int j = id ;j < m_recv_num_file_mes ;j++)
+            {
+                m_pack_recv_file_mes[j]  = m_pack_recv_file_mes[j+1];
+            }
+            pthread_mutex_unlock(&mutex_local_user); 
+            
+            return ;
+        }
+        
+        
+        printf("&&&&&&&\nbegin_location :%d\n",begin_location);
+
+
+        send_file_send(begin_location,m_pack_recv_file_mes[id].data.send_name);
+        
+        pthread_mutex_lock(&mutex_local_user); 
+
+        for(int j = id ;j <=m_recv_num_file_mes ;j++)
+        {
+            m_pack_recv_file_mes[j]  = m_pack_recv_file_mes[j+1];
+        }
+        m_recv_num_file_mes--;
+        pthread_mutex_unlock(&mutex_local_user); 
+        
+    }
 }
 
 
@@ -880,9 +1153,29 @@ void send_file_send(int begin_location,int file_size,char *file_path,char *recv_
 
 
 
-void massege()
+int file_mes_box()
 {
+    int chioce;
+    do
+    {
+        get_status_mes();
+        printf("pack num_chat:%d\n", m_recv_num_chat);
+        printf("\n\t\t************file mes box *************\n");
+        for(int i = 1; i <= m_recv_num_file_mes;i++)
+        {
+            if(m_pack_recv_file_mes[i].type == FILE_SEND_STOP_RP)
+                printf("\t\t*        send file %s filed       *\n",m_pack_recv_file_mes[i].data.send_name);
+            if(m_pack_recv_file_mes[i].type == FILE_RECV_RE)
+                printf("\t\t*        %s send file %s to you       *\n", m_pack_recv_file_mes[i].data.send_name,m_pack_recv_file_mes[i].data.mes);
+        }
+        printf("\t\t*        0.exit                 *\n");
+        printf("\t\t******************************* *\n");
+        printf("\t\tchoice：");
+        scanf("%d",&chioce);
+        deal_file_mes(chioce);
 
+    }while(chioce!=0);
+    return 0;
 }
 
 
@@ -905,7 +1198,7 @@ int main_menu()
         printf("\t\t*        9.chat with one        *\n");
         printf("\t\t*        10.chat with many      *\n");
         printf("\t\t*        11.send  file          *\n");
-        printf("\t\t*        12.message  box        *\n");
+        printf("\t\t*        12.file message box %d  *\n",m_recv_num_file_mes);
         printf("\t\t*        0.exit                 *\n");
         printf("\t\t******************************* *\n");
         printf("\t\tchoice：");
@@ -944,6 +1237,10 @@ int main_menu()
                 break;
             case 11:
                 send_file();
+                break;
+            case 12:
+                file_mes_box();
+                break;
             default:
                 break;
         }
