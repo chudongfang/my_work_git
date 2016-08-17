@@ -35,9 +35,19 @@ using namespace std;
 #define FILE_SEND_STOP_RP        15
 #define FILE_RECV_RE             16
 #define FILE_SEND                17
-#define FILE_RECV                18
+#define FILE_RECV_BEGIN          18 
+#define FILE_RECV_BEGIN_RP       19
+#define FILE_RECV_STOP_RP        20
+#define FILE_RECV                21
+#define FILE_FINI_RP             22
 #define EXIT                     -1
 
+
+
+#define FILE_STATU_RECV_ING       1
+#define FILE_STATU_RECV_STOP      2
+#define FILE_STATU_SEND_ING       3
+#define FILE_STATU_SEND_FINI      4
 
 
 #define SIZE_PASS_NAME  30
@@ -146,6 +156,12 @@ int  m_send_num;
 
 /**************************************/
 
+typedef struct pthread_parameter
+{
+    int a;
+    char str1[SIZE_PASS_NAME];
+    char str2[SIZE_PASS_NAME];
+}PTHREAD_PAR;
 
 
 
@@ -292,6 +308,7 @@ void print_infor_file()
             m_infor_user[i].statu = ONLINE;
             return ;
         }
+./client.cpp:570:17: error: return-statement with no value, in function returning ‘void*’ [-fpermissive]
     }
 }*/
 
@@ -357,8 +374,6 @@ void login(PACK *recv_pack)
     if(login_flag[0] =='1')
         m_infor_user[id].statu = ONLINE;
     free(recv_pack);
-    
-
 }
 /**********************************************************/
 
@@ -789,6 +804,7 @@ void file_recv_begin(PACK *recv_pack)
     int i;
     int file_size_now_t;
     printf("jajahaha  jiji %d\n", m_file_num);
+
     pthread_mutex_lock(&mutex_check_file);  
     
     for(i=1 ;i<= m_file_num ;i++)
@@ -798,7 +814,7 @@ void file_recv_begin(PACK *recv_pack)
             file_size_now_t = m_infor_file[i].file_size_now;
             flag = 1;
             break;
-        }
+        } 
     }
     
     if(!flag)
@@ -821,12 +837,13 @@ void file_recv_begin(PACK *recv_pack)
         printf("file_recv_begin t :%d\n", t);
         m_infor_file[m_file_num].file_size = t;
         m_infor_file[m_file_num].file_size_now  = 0;
-        m_infor_file[m_file_num].flag = 0;
+        m_infor_file[m_file_num].flag = FILE_STATU_RECV_ING;
     }
 
-
-
     pthread_mutex_unlock(&mutex_check_file);  
+    
+
+
     recv_pack->type = FILE_SEND_BEGIN_RP;
     strcpy(recv_pack->data.recv_name,recv_pack->data.send_name);
     
@@ -842,7 +859,7 @@ void file_recv_begin(PACK *recv_pack)
 
 
     send_pack(recv_pack);
-    print_infor_file();
+    //print_infor_file();
     free(recv_pack);
 }
 
@@ -904,16 +921,50 @@ void *pthread_check_file(void *arg)
 {
     while(1)
     {
+       
         pthread_mutex_lock(&mutex_check_file);  
         for(int i=1 ;i<=m_file_num ;i++)
         {
-            if(m_infor_file[i].file_size <= m_infor_file[i].file_size_now)
+            
+            if(m_infor_file[i].file_size <= m_infor_file[i].file_size_now&&(m_infor_file[i].flag == FILE_STATU_RECV_ING ||m_infor_file[i].flag == FILE_STATU_RECV_STOP))
             {
-                m_file_num --;
-                for(int j = i;j<=(m_file_num+1)&&m_file_num;j++)
+                char mes_t[MAX_CHAR];
+                printf("\033[; 35m**********jijmei********?\033[0m \n");
+                int id = find_userinfor(m_infor_file[i].file_recv_name);
+
+                PACK *pthread_check_file_t = (PACK*)malloc(sizeof(PACK));
+                memset(pthread_check_file_t, 0,sizeof(PACK));
+                pthread_check_file_t->type = FILE_RECV_BEGIN;
+                strcpy(pthread_check_file_t->data.send_name ,m_infor_file[i].file_send_name);
+                strcpy(pthread_check_file_t->data.recv_name,m_infor_file[i].file_recv_name);
+                
+                int len = m_infor_file[i].file_size;
+
+                memset(mes_t,0,sizeof(mes_t));
+                int digit = 0;
+                while(len != 0)
+                {   
+                    mes_t[digit++] = len%10;
+                    len /= 10;
+                }
+                mes_t[digit]  = -1;
+                for(int j=0 ;j< SIZE_PASS_NAME ;j++)
                 {
-                    m_infor_file[j] = m_infor_file[j+1];
-                }     
+                    mes_t[NUM_MAX_DIGIT+j] = m_infor_file[i].file_name[j];
+                }  
+
+
+                memcpy(pthread_check_file_t->data.mes,mes_t,sizeof(mes_t));  
+                send_pack(pthread_check_file_t);
+                free(pthread_check_file_t);
+                m_infor_file[i].flag = FILE_STATU_SEND_ING;
+
+                
+                // m_file_num --;
+                // for(int j = i;j<=(m_file_num+1)&&m_file_num;j++)
+                // {
+                    // m_infor_file[j] = m_infor_file[j+1];
+                // }     
                 break;
             }
 
@@ -921,7 +972,7 @@ void *pthread_check_file(void *arg)
             if(m_infor_file[i].file_size > m_infor_file[i].file_size_now )
             {
                 int id = find_userinfor(m_infor_file[i].file_send_name);
-                if(m_infor_user[id].statu == DOWNLINE && m_infor_file[i].flag == 0)
+                if(m_infor_user[id].statu == DOWNLINE && m_infor_file[i].flag == FILE_STATU_RECV_ING)
                 {
                     printf("\033[;35m file_name %s d\033[0m\n", m_infor_file[i].file_name);
                     
@@ -950,29 +1001,205 @@ void *pthread_check_file(void *arg)
                     strcpy(pthread_check_file_t.data.send_name ,m_infor_file[i].file_name);
                     strcpy(pthread_check_file_t.data.recv_name,m_infor_file[i].file_send_name);
                     memcpy(pthread_check_file_t.data.mes,mes,sizeof(mes));
-                    pthread_check_file_t.data.recv_fd = m_infor_user[id].socket_id; 
                     
                     send_pack(&pthread_check_file_t);
-                    
-                    m_infor_file[i].flag = 1;
+                    printf("jiji$$$$$$$$$$$$$$$$$$$$$$$$$$$$$\n");
+                    m_infor_file[i].flag = FILE_STATU_RECV_STOP;
                     break;
                 }
-
             }
-             
+            if(m_infor_file[i].flag == FILE_STATU_SEND_FINI)
+            {
+                unlink(m_infor_file[i].file_name);
+                m_file_num --;
+                for(int j = i;j<=(m_file_num+1)&&m_file_num;j++)
+                {
+                    m_infor_file[j] = m_infor_file[j+1];
+                } 
+
+            }     
         }
-
-
         pthread_mutex_unlock(&mutex_check_file); 
-        usleep(1);
+        usleep(10);
+    }    
+}
+
+
+void send_pack_memcpy_server(int type,char *send_name,char *recv_name,int sockfd1,char *mes)
+{
+    PACK pack_send_pack;
+    time_t timep;
+    pack_send_pack.type = type;
+    strcpy(pack_send_pack.data.send_name,send_name);
+    strcpy(pack_send_pack.data.recv_name,recv_name);
+    memcpy(pack_send_pack.data.mes,mes,MAX_CHAR*2); 
+    time(&timep);
+    pack_send_pack.data.time = timep;
+    printf("sockfd1:%d\n", sockfd1);
+    if(send(sockfd1,&pack_send_pack,sizeof(PACK),0) < 0){
+        my_err("send",__LINE__);
     }
-    
 }
 
 
 
 
 
+
+
+
+
+/*********************deal server to client*****************************/
+void *file_send_send(void *file_send_begin_t)
+{
+
+    PTHREAD_PAR *file_send_begin = (PTHREAD_PAR *)file_send_begin_t;
+    int fd;
+    int length;
+    int statu;
+    int id;
+    int sockfd;
+    int file_size;
+    int begin_location = file_send_begin->a;
+    int sum = begin_location;
+    char file_name[SIZE_PASS_NAME];
+    char recv_name[SIZE_PASS_NAME];
+    char mes[MAX_CHAR*2];
+    printf("\n\nsending the file.........\n");
+    
+    strcpy(file_name,file_send_begin->str1);
+    strcpy(recv_name,file_send_begin->str2);
+
+    if((fd = open(file_name,O_RDONLY)) == -1)
+    {
+        my_err("open",__LINE__);
+        return NULL;
+    }
+    
+    file_size=lseek(fd, 0, SEEK_END);
+    
+    lseek(fd ,begin_location ,SEEK_SET);
+    printf("file_size %d\n", file_size);
+    printf("begin_location%d\n", begin_location);
+    bzero(mes, MAX_CHAR*2); 
+
+    // 每读取一段数据，便将其发送给客户端，循环直到文件读完为止 
+    while((length = read(fd  ,mes+NUM_MAX_DIGIT ,MAX_CHAR*2 - NUM_MAX_DIGIT)) > 0) 
+    {
+        printf("send_::%d\n", sum);
+
+        if(sum == file_size)  
+            break;
+
+        id = find_userinfor(recv_name);
+        if(m_infor_user[id].statu == DOWNLINE)
+        {
+            int  file_id   = find_fileinfor(file_name);
+            int  file_size = m_infor_file[file_id].file_size;
+            char mes_t[MAX_CHAR];
+            PACK file_send_stop_t;
+
+            memset(&file_send_stop_t, 0,sizeof(PACK));
+            file_send_stop_t.type = FILE_RECV_STOP_RP;
+            strcpy(file_send_stop_t.data.send_name ,m_infor_file[file_id].file_send_name);
+            strcpy(file_send_stop_t.data.recv_name,m_infor_file[file_id].file_recv_name);
+                
+
+            memset(mes_t,0,sizeof(mes_t));
+            int digit = 0;
+            while(file_size != 0)
+            {   
+                mes_t[digit++] = file_size%10;
+                file_size /= 10;
+            }
+            mes_t[digit]  = -1;
+            for(int j=0 ;j< SIZE_PASS_NAME ;j++)
+            {
+                mes_t[NUM_MAX_DIGIT+j] = m_infor_file[file_id].file_name[j];
+            }  
+
+
+            memcpy(file_send_stop_t.data.mes,mes_t,sizeof(mes_t));  
+            send_pack(&file_send_stop_t);
+
+            free(file_send_begin);
+            return NULL ;
+        }
+
+        sockfd = m_infor_user[id].socket_id;
+        
+        int t=length;
+        int digit = 0;
+        while(t != 0)
+        {   
+            mes[digit++] = t%10;
+            t /= 10;
+        }
+        mes[digit]  = -1;
+        send_pack_memcpy_server(FILE_RECV,file_name,recv_name,sockfd,mes);
+        sum += length;
+        
+        bzero(mes, MAX_CHAR*2); 
+        usleep(100000);
+    } 
+    // 关闭文件 
+    close(fd);
+    printf("guanle mei ?/**/\n");
+    free(file_send_begin);
+}
+
+
+
+
+
+void file_send_begin(PACK *recv_pack)
+{
+    PTHREAD_PAR *file_send_begin_t;
+    file_send_begin_t = (PTHREAD_PAR *)malloc(sizeof(PTHREAD_PAR));
+    char recv_name[SIZE_PASS_NAME];
+    char file_name[SIZE_PASS_NAME];
+    int  begin_location=0;
+    strcpy(recv_name,recv_pack->data.send_name);
+    strcpy(file_name,recv_pack->data.recv_name);
+    printf("file namehahha%s\n", file_name);
+    
+    for(int i=0 ;i<NUM_MAX_DIGIT ;i++)
+    {
+        if(recv_pack->data.mes[i] == -1)  
+            break;
+        int t1 = 1;
+        for(int l=0;l<i;l++)
+            t1*=10;
+        begin_location += (int)recv_pack->data.mes[i]*t1;
+    }
+    int file_id = find_fileinfor(file_name);
+
+    if(begin_location >= m_infor_file[file_id].file_size)
+    {
+        m_infor_file[file_id].flag  = FILE_STATU_SEND_FINI;
+    }
+
+    file_send_begin_t->a = begin_location;
+    //printf("begin_loclation :%d\n",begin_location);
+    strcpy(file_send_begin_t->str1,file_name);
+    strcpy(file_send_begin_t->str2,recv_name);
+    //printf("file name%s\n", file_name);
+    file_send_send((void *)file_send_begin_t);
+    free(recv_pack);
+
+}
+
+
+void file_send_finish(PACK *recv_pack)
+{   
+    printf("^^^^^^^^^^^^^^^^^^^^^^hahah%s\n",recv_pack->data.mes);
+    int id = find_fileinfor(recv_pack->data.mes);
+    m_infor_file[id].flag = FILE_STATU_SEND_FINI;
+    free(recv_pack);
+}
+
+
+/*****************************************************/
 
 
 void *deal(void *recv_pack_t)
@@ -1022,11 +1249,16 @@ void *deal(void *recv_pack_t)
         case FILE_SEND:
             file_recv(recv_pack);
             break;
+        case FILE_SEND_BEGIN_RP:
+            file_send_begin(recv_pack);
+            break;
+        case FILE_FINI_RP:
+            file_send_finish(recv_pack);
+            break;
         case EXIT:
 
             break;       
     }
-
 }
 
 
@@ -1042,7 +1274,7 @@ void *serv_send_thread(void *arg)
     while(1)
     {
         pthread_mutex_lock(&mutex); 
-        //printf("serv_send_thread:%d\n", m_send_num);
+        // printf("serv_send_thread:%d\n", m_send_num);
         user_statu = DOWNLINE;
         for(i = m_send_num-1;i>=0;i--)
         {
@@ -1065,6 +1297,8 @@ void *serv_send_thread(void *arg)
                     recv_fd_t = recv_fd_online;
                 else
                     recv_fd_t = m_pack_send[i].data.recv_fd;
+                
+
                 if(send(recv_fd_t,&m_pack_send[i],sizeof(PACK),0) < 0){
                     my_err("send",__LINE__);
                 }
@@ -1224,7 +1458,6 @@ int main()
                 
                 printf("m_file_num1:%d\n", m_file_num);
                 print_infor_file();
-                
                 printf("m_file_num2:%d\n", m_file_num);
                 
 

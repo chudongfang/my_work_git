@@ -33,7 +33,11 @@
 #define FILE_SEND_STOP_RP        15
 #define FILE_RECV_RE             16
 #define FILE_SEND                17
-#define FILE_RECV                18
+#define FILE_RECV_BEGIN          18 
+#define FILE_RECV_BEGIN_RP       19
+#define FILE_RECV_STOP_RP        20
+#define FILE_RECV                21
+#define FILE_FINI_RP             22
 #define EXIT                     -1
 
 
@@ -91,6 +95,15 @@ typedef struct package{
     DATA  data;
 }PACK;
 
+typedef struct pthread_parameter
+{
+    int a;
+    int b;
+}PTHREAD_PAR;
+
+
+
+
 
 
 /************************客户端缓冲区**********************/
@@ -114,12 +127,13 @@ PACK m_pack_recv_friend_see   [MAX_PACK_CONTIAN];
 PACK m_pack_recv_chat         [MAX_PACK_CONTIAN];
 PACK m_pack_recv_send_file    [MAX_PACK_CONTIAN];
 PACK m_pack_recv_file_mes     [MAX_PACK_CONTIAN];
-
+PACK m_pack_recv_file         [MAX_PACK_CONTIAN];
 
 int m_recv_num_friend_see;
 int m_recv_num_chat;
 int m_recv_num_send_file;
 int m_recv_num_file_mes;
+int m_recv_num_file;
 
 /****************************************************/
 
@@ -148,7 +162,7 @@ short PORT = 10222;
 typedef struct sockaddr SA;
 pthread_mutex_t  mutex_local_user;
 
-
+pthread_mutex_t  mutex_recv_file;
 
 
 void print_file_mes()
@@ -238,7 +252,23 @@ void send_pack_memcpy(int type,char *send_name,char *recv_name,char *mes)
 
 
 
-
+int get_choice(char *choice_t)
+{
+    int choice =0;
+    for(int i=0;i<strlen(choice_t) ;i++)
+        if(choice_t[i]<'0' || choice_t[i]>'9')
+            return -1;
+    for(int i=0;i<strlen(choice_t);i++)
+    {
+        int t=1;
+        for(int j=1;j<strlen(choice_t)-i;j++)
+        {
+            t *=10;
+        }
+        choice += t*(int)(choice_t[i] - 48);
+    }
+    return choice;
+}
 
 
 
@@ -300,6 +330,7 @@ int login()
 
 int login_menu()
 {
+    char choice_t[100];
     int chioce;
     do
     {
@@ -309,7 +340,8 @@ int login_menu()
         printf("\t\t*        0.exit              *\n");
         printf("\t\t*******************************\n");
         printf("\t\tchoice：");
-        scanf("%d",&chioce);
+        scanf("%s",choice_t);
+        chioce = get_choice(choice_t);
         switch(chioce)
         {  
             case 1:
@@ -488,7 +520,7 @@ void send_file_send(int begin_location,char *file_path)
             length /= 10;
         }
         mes[digit]  = -1;
-        printf("have sended : %d    %d b  \n",(int)((double)sum/file_size*100),sum);
+        printf("have sended : %d%%    %d  \n",(int)((double)sum/file_size*100),sum);
         printf("%s\n", file_path);
         send_pack_memcpy(FILE_SEND,m_my_infor.username,file_path,mes);
         
@@ -532,7 +564,63 @@ void *pthread_send_file(void *mes_t)
 
 
 
+void *pthread_recv_file(void *par_t)
+{
+    PTHREAD_PAR * pthread_par  = (PTHREAD_PAR * )par_t;
+    int file_size              = pthread_par->a ;
+    int begin_location_server  = pthread_par->b;
+    int sum                    = begin_location_server; 
+    while(1)
+    {
+        pthread_mutex_lock(&mutex_recv_file); 
+        int  fd;
+        char file_name[MAX_CHAR];
+        for(int i=1;i<=m_recv_num_file ;i++)
+        {
+            
+            int  len = 0;
+            for(int j=0 ;j<NUM_MAX_DIGIT ;j++)
+            {
+                if(m_pack_recv_file[i].data.mes[j] == -1)  
+                    break;
+                int t1 = 1;
+                for(int l=0;l<j;l++)
+                    t1*=10;
+                len += (int)m_pack_recv_file[i].data.mes[j]*t1;
 
+            }
+
+
+            //printf("\033[;33mlen = %d\033[0m \n", len);
+            
+            strcpy(file_name,m_pack_recv_file[i].data.send_name);
+            //you can creat this file when you get the file_send_begin
+            if((fd = open(file_name,O_WRONLY | O_CREAT | O_APPEND, S_IRUSR | S_IWUSR)) < 0)
+            {
+                my_err("open",__LINE__);
+                return NULL;
+            }
+
+            if(write(fd,m_pack_recv_file[i].data.mes + NUM_MAX_DIGIT,len) < 0)
+                my_err("write",__LINE__);
+            // 关闭文件 
+            close(fd);
+            sum += len;
+            printf("have recved : %d%%    %d  \n",(int)((double)sum/file_size*100),sum);
+            
+            m_recv_num_file = 0;
+            if(sum >= file_size)  
+            {
+                send_pack(FILE_FINI_RP,m_my_infor.username,"server",file_name);
+                return NULL;  
+            }
+        }
+
+        pthread_mutex_unlock(&mutex_recv_file);
+        usleep(10);
+    }
+    
+}
 
 
 
@@ -597,12 +685,20 @@ void *clien_recv_thread(void *arg)
                  pthread_create(&pid_send_file,NULL,pthread_send_file,(void *)pack_t.data.mes);
                 break;
             case FILE_SEND_STOP_RP:
-                printf("*******jijiijijij********8");
                 m_pack_recv_file_mes[++m_recv_num_file_mes]             = pack_t;
-                printf("  ji:%d\n", m_recv_num_file_mes);
                 break;
-
-
+            case FILE_RECV_BEGIN:
+                m_pack_recv_file_mes[++m_recv_num_file_mes]             = pack_t;
+                break;
+            case FILE_RECV:
+                pthread_mutex_lock(&mutex_recv_file); 
+                m_pack_recv_file[++m_recv_num_file]                     = pack_t;                
+                printf("FILE_RECV:%d\n", m_recv_num_file);
+                pthread_mutex_unlock(&mutex_recv_file);
+                break; 
+            case FILE_RECV_STOP_RP:
+                m_pack_recv_file_mes[++m_recv_num_file_mes]             = pack_t;
+                break;
         }
         pthread_mutex_unlock(&mutex_local_user); 
         usleep(1); 
@@ -612,8 +708,9 @@ void *clien_recv_thread(void *arg)
 
 void init_clien_pthread()
 {
-    pthread_t pid_deal_statu,pid_recv;
+    pthread_t pid_deal_statu,pid_recv,pid_recv_file;
     pthread_create(&pid_deal_statu,NULL,deal_statu,NULL);
+
     pthread_create(&pid_recv,NULL,clien_recv_thread,NULL);
 } 
 
@@ -772,9 +869,6 @@ void group_see()
     }
     pthread_mutex_unlock(&mutex_local_user);  
 }
-
-
-
 
 
 void send_mes(char mes_recv_name[],int type)
@@ -1011,6 +1105,10 @@ void send_mes_to_group()
 
 
 /**********************send file********************************/
+/***********************file toos********************************/
+
+
+/*you need creat the file before!*/
 
 int get_file_size(char *file_name)
 {
@@ -1025,6 +1123,15 @@ int get_file_size(char *file_name)
     close(fd);
     return len;
 }
+
+
+/*********************************************************/
+
+
+
+
+
+
 
 
 
@@ -1064,14 +1171,8 @@ void send_file()
         file_size_t /= 10;
     }
     mes_t[digit]  = -1;
-    printf("file_size1:");
-    for(int j=0 ;j<=NUM_MAX_DIGIT;j++)
-    {
-        if(mes_t[j] == '\0')
-            break;
-        printf("%c ",mes_t[j]+48);
-    }
-    
+   
+
     for(int i=0 ;i< SIZE_PASS_NAME ;i++)
     {
         mes_t[NUM_MAX_DIGIT+i] = file_path[i];
@@ -1083,65 +1184,222 @@ void send_file()
 }
 
 
+void file_infor_delete(int id)
+{
+    pthread_mutex_lock(&mutex_local_user); 
+    for(int j = id ;j <=m_recv_num_file_mes ;j++)
+    {
+        m_pack_recv_file_mes[j]  = m_pack_recv_file_mes[j+1];
+    }
+    m_recv_num_file_mes--;
+    pthread_mutex_unlock(&mutex_local_user); 
+}
+
+
+
+void mes_sendfile_fail(int id)
+{
+    char chioce[10];
+    int begin_location = 0;
+    for(int i=0 ;i<NUM_MAX_DIGIT ;i++)
+    {
+        if( m_pack_recv_file_mes[id].data.mes[i] == -1)  
+            break;
+        printf("%d\n\n",m_pack_recv_file_mes[id].data.mes[i]);
+        int t1 = 1;
+        for(int l=0;l<i;l++)
+            t1*=10;
+        begin_location += (int)m_pack_recv_file_mes[id].data.mes[i] * t1;
+
+    }
+
+
+
+    int file_size_t = get_file_size(m_pack_recv_file_mes[id].data.send_name);
+    printf("the file %s send failed ,have sended %d%%,do you want send again?\n", m_pack_recv_file_mes[id].data.send_name,(int)((double)begin_location/file_size_t*100));
+    printf("y/n :");
+    scanf("%s",chioce);
+    
+
+    if(chioce[0] != 'Y' && chioce[0] != 'y')
+    {
+        file_infor_delete(id);
+        return ;
+    }
+    
+    
+    printf("&&&&&&&\nbegin_location :%d\n",begin_location);
+
+
+    send_file_send(begin_location,m_pack_recv_file_mes[id].data.send_name);
+    file_infor_delete(id);
+
+}
+
+
+void mes_recv_requir(int id)
+{
+    pthread_t  pid_recv_file;
+    char choice[10];
+    int len ;
+    int fd;
+    char mes_t[MAX_CHAR];
+    int file_size = 0;
+    char file_name[SIZE_PASS_NAME];
+    
+    PTHREAD_PAR * par_t = (PTHREAD_PAR *)malloc(sizeof(PTHREAD_PAR));
+
+    for(int i=0 ;i<NUM_MAX_DIGIT ;i++)
+    {
+        if(m_pack_recv_file_mes[id].data.mes[i] == -1)  
+            break;
+        int t1 = 1;
+        for(int l=0;l<i;l++)
+            t1*=10;
+        file_size += (int)m_pack_recv_file_mes[id].data.mes[i]*t1;
+
+    }   
+    // for(int i=0 ;i<=50;i++)
+        // printf("%d\n", m_pack_recv_file_mes[id].data.mes[i]);
+    // printf("%s\n", m_pack_recv_file_mes[id].data.mes+NUM_MAX_DIGIT);
+    strcpy(file_name,m_pack_recv_file_mes[id].data.mes+NUM_MAX_DIGIT);
+
+    
+    printf("  %s send file %s size(%db)to you \n", m_pack_recv_file_mes[id].data.send_name,file_name,file_size);
+    printf(" do you want receive it? \n");
+    printf("(y/n) :");
+    scanf("%s", choice);
+    if(choice[0] != 'Y' && choice[0] != 'y')
+    {
+
+       /**********************************************/
+        file_infor_delete(id);
+        /*********************************************/
+        
+        return ;
+    }
+
+
+    
+    if((fd = open(file_name,O_WRONLY | O_CREAT , S_IRUSR | S_IWUSR)) < 0)
+    {
+        my_err("open",__LINE__);
+        return ;
+    }
+    len = lseek(fd, 0, SEEK_END);
+    close(fd);
+
+    par_t->a = file_size;
+    par_t->b = len;
+    
+    int digit = 0;
+    while(len != 0)
+    {   
+        mes_t[digit++] = len%10;
+        len /= 10;
+    }
+    mes_t[digit]  = -1;
+
+    //printf("file_name:%s\n", file_name);
+    
+    send_pack_memcpy(FILE_SEND_BEGIN_RP ,m_my_infor.username ,file_name ,mes_t);
+    
+
+    pthread_create(&pid_recv_file,NULL,pthread_recv_file,(void *)par_t);
+
+    /***************************************************/
+   
+    file_infor_delete(id);
+    /*************************************************/
+}
+
+
+
+void mes_recvfile_fail(int id)
+{
+    pthread_t  pid_recv_file;
+    char chioce[10];
+    int begin_location_server;
+    int file_size;
+    char file_name[SIZE_PASS_NAME];
+    char mes_t[MAX_CHAR];
+    PTHREAD_PAR * par_t = (PTHREAD_PAR *)malloc(sizeof(PTHREAD_PAR));
+
+    for(int i=0 ;i<NUM_MAX_DIGIT ;i++)
+    {
+        if(m_pack_recv_file_mes[id].data.mes[i] == -1)  
+            break;
+        int t1 = 1;
+        for(int l=0;l<i;l++)
+            t1*=10;
+        file_size += (int)m_pack_recv_file_mes[id].data.mes[i]*t1;
+
+    }   
+
+    strcpy(file_name,m_pack_recv_file_mes[id].data.mes+NUM_MAX_DIGIT);
+    
+    begin_location_server= get_file_size(file_name);
+    
+
+    par_t->a = file_size;
+    par_t->b = begin_location_server;
+    printf("the file %s recv failed ,have recved %d%%,do you want recv continue?\n", m_pack_recv_file_mes[id].data.send_name,(int)((double)begin_location_server/file_size*100));
+    printf("y/n :");
+    scanf("%s",chioce);
+    
+    
+
+    if(chioce[0] != 'Y' && chioce[0] != 'y')
+    {
+
+        /************************************/
+        file_infor_delete(id); 
+        /************************************/
+        
+        return ;
+    }
+    
+    
+    printf("&&&&&&&\nbegin_location :%d\n",begin_location_server);
+
+    int len = begin_location_server;
+    int digit = 0;
+    while(len != 0)
+    {   
+        mes_t[digit++] = len%10;
+        len /= 10;
+    }
+    mes_t[digit]  = -1;
+
+
+
+
+    send_pack_memcpy(FILE_SEND_BEGIN_RP ,m_my_infor.username ,file_name ,mes_t);
+    
+    pthread_create(&pid_recv_file,NULL,pthread_recv_file,(void *)par_t);
+
+  
+  /*****************************************************/  
+    file_infor_delete(id);
+  /*******************************************************/
+
+}
+
+
 
 
 void deal_file_mes(int id)
 {
-    char chioce[10];
     if(m_pack_recv_file_mes[id].type == FILE_SEND_STOP_RP)
     {
-        
-
-        int begin_location = 0;
-        for(int i=0 ;i<NUM_MAX_DIGIT ;i++)
-        {
-            if( m_pack_recv_file_mes[id].data.mes[i] == -1)  
-                break;
-            printf("%d\n\n",m_pack_recv_file_mes[id].data.mes[i]);
-            int t1 = 1;
-            for(int l=0;l<i;l++)
-                t1*=10;
-            begin_location += (int)m_pack_recv_file_mes[id].data.mes[i] * t1;
-
-        }
-
-
-
-        int file_size_t = get_file_size(m_pack_recv_file_mes[id].data.send_name);
-        printf("the file %s send failed ,have sended  %d,do you want send again?\n", m_pack_recv_file_mes[id].data.send_name,(int)((double)begin_location/file_size_t*100));
-        printf("y/n :");
-        scanf("%s",chioce);
-        
-        
-
-        if(chioce[0] != 'Y' && chioce[0] != 'y')
-        {
-            pthread_mutex_lock(&mutex_local_user); 
-            m_recv_num_file_mes--;
-            for(int j = id ;j < m_recv_num_file_mes ;j++)
-            {
-                m_pack_recv_file_mes[j]  = m_pack_recv_file_mes[j+1];
-            }
-            pthread_mutex_unlock(&mutex_local_user); 
-            
-            return ;
-        }
-        
-        
-        printf("&&&&&&&\nbegin_location :%d\n",begin_location);
-
-
-        send_file_send(begin_location,m_pack_recv_file_mes[id].data.send_name);
-        
-        pthread_mutex_lock(&mutex_local_user); 
-
-        for(int j = id ;j <=m_recv_num_file_mes ;j++)
-        {
-            m_pack_recv_file_mes[j]  = m_pack_recv_file_mes[j+1];
-        }
-        m_recv_num_file_mes--;
-        pthread_mutex_unlock(&mutex_local_user); 
-        
+        mes_sendfile_fail(id);
+    }
+    else if(m_pack_recv_file_mes[id].type == FILE_RECV_BEGIN)
+    {
+        mes_recv_requir(id);
+    }else if(m_pack_recv_file_mes[id].type == FILE_RECV_STOP_RP)
+    {
+        mes_recvfile_fail(id);
     }
 }
 
@@ -1155,6 +1413,7 @@ void deal_file_mes(int id)
 
 int file_mes_box()
 {
+    char choice_t[100];
     int chioce;
     do
     {
@@ -1165,14 +1424,18 @@ int file_mes_box()
         {
             if(m_pack_recv_file_mes[i].type == FILE_SEND_STOP_RP)
                 printf("\t\t*        send file %s filed       *\n",m_pack_recv_file_mes[i].data.send_name);
-            if(m_pack_recv_file_mes[i].type == FILE_RECV_RE)
-                printf("\t\t*        %s send file %s to you       *\n", m_pack_recv_file_mes[i].data.send_name,m_pack_recv_file_mes[i].data.mes);
+            if(m_pack_recv_file_mes[i].type == FILE_RECV_BEGIN)
+                printf("\t\t*        %s send file %s to you       *\n", m_pack_recv_file_mes[i].data.send_name,m_pack_recv_file_mes[i].data.mes+SIZE_PASS_NAME);
+            if(m_pack_recv_file_mes[i].type == FILE_RECV_STOP_RP)
+                printf("\t\t*         recv file %s filed      *\n", m_pack_recv_file_mes[i].data.mes);
         }
         printf("\t\t*        0.exit                 *\n");
         printf("\t\t******************************* *\n");
         printf("\t\tchoice：");
-        scanf("%d",&chioce);
-        deal_file_mes(chioce);
+        scanf("%s",choice_t);
+        chioce = get_choice(choice_t);
+        if(chioce != -1)   
+            deal_file_mes(chioce);
 
     }while(chioce!=0);
     return 0;
@@ -1181,6 +1444,7 @@ int file_mes_box()
 
 int main_menu()
 {
+    char choice_t[100];
     int chioce;
     do
     {
@@ -1202,7 +1466,8 @@ int main_menu()
         printf("\t\t*        0.exit                 *\n");
         printf("\t\t******************************* *\n");
         printf("\t\tchoice：");
-        scanf("%d",&chioce);
+        scanf("%s",choice_t);
+        chioce = get_choice(choice_t);
         switch(chioce)
         {  
             case 1:
