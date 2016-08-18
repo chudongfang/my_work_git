@@ -14,6 +14,7 @@
 #include <string.h>
 #include <signal.h>
 #include <time.h>
+#include <termios.h>  
 
 /*****************same with server**********************/
 #define LOGIN                    1
@@ -103,7 +104,13 @@ typedef struct pthread_parameter
 
 
 
-
+typedef struct prinit_mes
+{
+    char name[MAX_CHAR];
+    char time[MAX_CHAR];
+    char mes [MAX_CHAR];
+    
+}PRINT_MES;
 
 
 /************************客户端缓冲区**********************/
@@ -135,6 +142,10 @@ int m_recv_num_send_file;
 int m_recv_num_file_mes;
 int m_recv_num_file;
 
+
+
+
+
 /****************************************************/
 
 
@@ -142,18 +153,61 @@ int m_flag_group_create;
 int m_flag_group_join ;
 int m_flag_group_del  ;
 int m_flag_print_mes;
+// int window_col;
+// int window_row;
 
 
+
+/****************************************************/
+
+PRINT_MES m_print_mes[7];
+int m_print_mes_num;
 /***********************function***********************/
+void print_file_mes();
 void my_err(const char * err_string,int line);
 void init();
-void sig_close();
-int send_login(char username_t [],char password_t []);
-int login();
-int login_menu();
-int send_registe(char username_t[],char password_t[]);
+void sig_close(int i);
+void send_pack(int type,char *send_name,char *recv_name,char *mes);
+void send_pack_memcpy(int type,char *send_name,char *recv_name,char *mes);
+int  get_choice(char *choice_t);
+int  send_login(char username_t[],char password_t[]);
+int  login();
+int  login_menu();
+int  send_registe(char username_t[],char password_t[]);
 void registe();
-int main_menu();
+void change_statu(PACK pack_deal_statu_t);
+void *deal_statu(void *arg);
+void send_file_send(int begin_location,char *file_path);
+void *pthread_send_file(void *mes_t);
+void *pthread_recv_file(void *par_t);
+void init_clien_pthread();
+void get_status_mes();
+void friends_see();
+int  judge_same_friend(char add_friend_t[]);
+void add_friend();
+void del_friend();
+int  judge_same_group(char *group_name);
+void group_see();
+void send_mes(char mes_recv_name[],int type);
+void print_mes(int id);
+void *show_mes(void *username);
+void send_mes_to_one();
+void group_create();
+void group_join();
+void group_qiut();
+void group_del();
+void send_mes_to_group();
+int  get_file_size(char *file_name);
+void send_file();
+void file_infor_delete(int id);
+void mes_sendfile_fail(int id);
+void mes_recv_requir(int id);
+void mes_recvfile_fail(int id);
+void deal_file_mes(int id);
+int  file_mes_box();
+int  main_menu();
+
+
 
 
 int sockfd;
@@ -177,11 +231,6 @@ void print_file_mes()
 
     }
 }
-
-
-
-
-
 
 
 
@@ -273,6 +322,17 @@ int get_choice(char *choice_t)
 
 
 
+/***********************mysql**********************************/
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -311,19 +371,19 @@ int login()
 
     login_flag = send_login(username_t,password_t);
     if(login_flag ==  2){
-        printf("the username is not exit.\n");
+        printf("\033[;31mthe username is not exit.\033[0m\n");
         return 0;
     }   
     if(login_flag ==  3 ){
-        printf("the user has loged in .\n");
+        printf("\033[;31mthe user has loged in .\033[0m\n");
         return 0;
     }  
     if(login_flag == 0) {
-        printf("the password is not crrect.\n");
+        printf("\033[;31mthe password is not crrect.\033[0m\n");
         return 0;
     }
     strcpy(m_my_infor.username,username_t);
-    printf("load successfully!\n");
+    printf("\033[;32mload successfully!\033[0m\n");
     return 1;
 }
 
@@ -334,11 +394,11 @@ int login_menu()
     int chioce;
     do
     {
-        printf("\n\t\t*******************************\n");
-        printf("\t\t*        1.login in           *\n");
-        printf("\t\t*        2.register           *\n");
-        printf("\t\t*        0.exit              *\n");
-        printf("\t\t*******************************\n");
+        printf("\n\t\t\33[1m\033[;34m*******************************\033[0m\n");
+        printf("\t\t\033[;34m*\033[0m        1.login in           \033[;34m*\033[0m \n");
+        printf("\t\t\033[;34m*\033[0m        2.register           \033[;34m*\033[0m \n");
+        printf("\t\t\033[;34m*\033[0m        0.exit               \033[;34m*\033[0m \n");
+        printf("\t\t\033[;34m*******************************\033[0m\n");
         printf("\t\tchoice：");
         scanf("%s",choice_t);
         chioce = get_choice(choice_t);
@@ -398,10 +458,10 @@ void registe()
     printf("please input the password you want register:\n");
     scanf("%s",password_t);
     if(send_registe(username_t,password_t))
-        printf("registe successfully!\n");
+        printf("\033[;32mregiste successfully!\033[0m\n");
     else 
-        printf("the name is used ,please input another one\n");
-}
+        printf("\033[;31mthe name is used ,please input another one\033[0m\n");
+}  
 
 
 /************************************************************/
@@ -846,6 +906,56 @@ void del_friend()
 
 /***********************group***********************************/
 
+
+void show_mes_smart(char *name ,char *time ,char *mes)
+{
+    int number = 4;
+    if(m_print_mes_num == number)  
+    {
+        for(int i=1;i<=3 ;i++)
+            m_print_mes[i] = m_print_mes[i+1];
+        strcpy(m_print_mes[number].name,name);
+        strcpy(m_print_mes[number].time,time);
+        strcpy(m_print_mes[number].mes,mes);
+    }
+    else{
+         strcpy(m_print_mes[++m_print_mes_num].name,name);
+         strcpy(m_print_mes[m_print_mes_num].time,time);
+         strcpy(m_print_mes[m_print_mes_num].mes,mes);
+    }
+
+
+
+    printf("\33[25A\n");  
+    
+    for(int i=1;i<=12;i++)
+    {
+        for(int i=1;i<30;i++)
+            printf(" ");
+        printf("\n");
+    }
+
+    printf("\33[13A\n");
+    for(int i=1;i<=m_print_mes_num;i++)
+    {
+        printf("\033[40;42m%s\033[0m\t%s",m_print_mes[i].name,m_print_mes[i].time);
+        printf("%s\n", m_print_mes[i].mes);
+    }
+    for(int i=1;i<=4- m_print_mes_num ;i++)
+    {
+        printf("\n");
+        printf("\n\n");
+
+    }
+    printf("\33[11B\n"); 
+}
+
+
+
+
+
+
+
 int judge_same_group(char *group_name)
 {
     int i;
@@ -877,18 +987,22 @@ void send_mes(char mes_recv_name[],int type)
     char mes[MAX_CHAR];
     time_t timep;
     getchar();
+    printf("******************please input****************************\n");
     while(1)
     {   
         time(&timep);
         memset(mes,0,sizeof(mes));
-        printf("\n%s",ctime(&timep) );
+        
         if(type == CHAT_ONE)
-            printf("%s->",m_my_infor.username);
+            // printf("%s->",m_my_infor.username);
         fgets(mes,MAX_CHAR,stdin);
         while(mes[0] == 10)
             fgets(mes,MAX_CHAR,stdin);
         if(strcmp(mes,"quit\n") == 0)
             break;
+        printf("\33[1A                                \n");
+        printf("\33[1A ");
+        show_mes_smart(m_my_infor.username ,ctime(&timep) ,mes);
         
         //printf("\t%s\n%s\n", m_my_infor.username,ctime(&timep),mes);
 
@@ -905,8 +1019,7 @@ void print_mes(int id)
     memset(group_print_name,0,sizeof(group_print_name));
     if(m_pack_recv_chat[id].type == CHAT_ONE)
     {
-        printf("\033[40;42m%s\033[0m\t%s\n",m_pack_recv_chat[id].data.send_name,ctime(&m_pack_recv_chat[id].data.time));
-        printf("%s\n", m_pack_recv_chat[id].data.mes);
+        show_mes_smart(m_pack_recv_chat[id].data.send_name,ctime(&m_pack_recv_chat[id].data.time),m_pack_recv_chat[id].data.mes);
     }
     else
     {
@@ -914,10 +1027,8 @@ void print_mes(int id)
         {
             group_print_name[i] = m_pack_recv_chat[id].data.mes[i];
         }
-        printf("\033[40;42m%s\033[0m\t%s\n",group_print_name,ctime(&m_pack_recv_chat[id].data.time));
-        printf("%s\n", m_pack_recv_chat[id].data.mes+SIZE_PASS_NAME);
-    }
-   
+        show_mes_smart( group_print_name,ctime(&m_pack_recv_chat[id].data.time),m_pack_recv_chat[id].data.mes+SIZE_PASS_NAME);
+   }
 }
 
 
@@ -968,20 +1079,13 @@ void send_mes_to_one()
         printf("sorry,you don't have the friend named !%s\n",mes_recv_name);
         return ;
     }
+    printf("\33[2J \33[30A ***************messages************************");
+    printf("\33[23B\n");
     m_flag_print_mes = 1;
     m_my_infor.friends[id].mes_num = 0;
     pthread_create(&pid,NULL,show_mes,(void *)mes_recv_name);
     send_mes(mes_recv_name,CHAT_ONE);
 }
-
-
-
-
-
-
-
-
-
 
 
 void group_create()
@@ -1092,16 +1196,6 @@ void send_mes_to_group()
     pthread_create(&pid,NULL,show_mes,(void *)mes_recv_group_name);
     send_mes(mes_recv_group_name,CHAT_MANY);
 }
-
-
-
-
-
-
-
-
-
-
 
 
 /**********************send file********************************/
@@ -1343,7 +1437,7 @@ void mes_recvfile_fail(int id)
 
     par_t->a = file_size;
     par_t->b = begin_location_server;
-    printf("the file %s recv failed ,have recved %d%%,do you want recv continue?\n", m_pack_recv_file_mes[id].data.send_name,(int)((double)begin_location_server/file_size*100));
+    printf("the file %s recv failed ,have recved %d%%,do you want recv continue?\n", file_name,(int)((double)begin_location_server/file_size*100));
     printf("y/n :");
     scanf("%s",chioce);
     
@@ -1427,7 +1521,7 @@ int file_mes_box()
             if(m_pack_recv_file_mes[i].type == FILE_RECV_BEGIN)
                 printf("\t\t*        %s send file %s to you       *\n", m_pack_recv_file_mes[i].data.send_name,m_pack_recv_file_mes[i].data.mes+SIZE_PASS_NAME);
             if(m_pack_recv_file_mes[i].type == FILE_RECV_STOP_RP)
-                printf("\t\t*         recv file %s filed      *\n", m_pack_recv_file_mes[i].data.mes);
+                printf("\t\t*         recv file %s filed      *\n", m_pack_recv_file_mes[i].data.mes+NUM_MAX_DIGIT);
         }
         printf("\t\t*        0.exit                 *\n");
         printf("\t\t******************************* *\n");
@@ -1519,11 +1613,17 @@ int main_menu()
 int main(int argc, char const *argv[])
 {
 	int flag =0;
-
-	signal(SIGINT,sig_close);//关闭CTRL+C
+    // struct winsize size;  
+	
+    signal(SIGINT,sig_close);//关闭CTRL+C
     init();//启动并连接服务器
-
-    login_menu();   
+    
+    // ioctl(STDIN_FILENO,TIOCGWINSZ,&size); //get size of window
+    // window_col = size.ws_col;
+    // window_row = size.ws_row;
+   
+    if(login_menu() == 0)  
+        return 0;   
     init_clien_pthread();
     main_menu();
   

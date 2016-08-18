@@ -169,14 +169,47 @@ typedef struct pthread_parameter
 
 /**********function***************/
 void my_err(const char * err_string,int line);
-void signal_close(int signal_num);
-int find_userinfor(char username_t[]);
+void signal_close(int i);
+void send_pack(PACK *pack_send_pack_t);
+void print_send_pack();
+void print_infor_group();
+void print_infor_user();
+void print_infor_file();
+int  find_userinfor(char username_t[]);
 void login(PACK *recv_pack);
+int  judge_usename_same(char username_t[]);
 void registe(PACK *recv_pack);
-void *deal(PACK *recv_pack);
+void send_statu(PACK *recv_pack);
+void friend_add(PACK *recv_pack);
+void del_friend_infor(int id,char friend_name[]); 
+void friend_del(PACK *recv_pack);
+void send_mes_to_one(PACK *recv_pack);
+void group_create(PACK *recv_pack);
+void group_join(PACK *recv_pack);
+void del_group_from_user(char *username,char *groupname);
+void group_qiut(PACK *recv_pack);
+void group_del_one(int id);
+void group_del(PACK *recv_pack);
+int  find_groupinfor(char groupname_t[]);
+void send_mes_to_group(PACK *recv_pack);
+int  find_fileinfor(char *filename);
+void file_recv_begin(PACK *recv_pack);
+void file_recv(PACK *recv_pack);
+void *pthread_check_file(void *arg);
+void send_pack_memcpy_server(int type,char *send_name,char *recv_name,int sockfd1,char *mes);
+void *file_send_send(void *file_send_begin_t);
+void file_send_begin(PACK *recv_pack);
+void file_send_finish(PACK *recv_pack);
+void *deal(void *recv_pack_t);
 void *serv_send_thread(void *arg);
 void init_server_pthread();
-int judge_usename_same(char username_t[]);
+
+
+
+
+
+
+
 
 
 
@@ -311,11 +344,95 @@ void print_infor_file()
 ./client.cpp:570:17: error: return-statement with no value, in function returning ‘void*’ [-fpermissive]
     }
 }*/
+/***********************mysql**********************************/
+/*int getmes_from_mysql()
+{
+    MYSQL           mysql;
+    MYSQL_RES       *res = NULL;
+    MYSQL_ROW       row;
+    char            *query_str = NULL;
+    int             rc, i, fields;
+    int             rows;
+
+    if (NULL == mysql_init(&mysql)) {               //初始化mysql变量
+        printf("mysql_init(): %s\n", mysql_error(&mysql));
+        return -1;
+    }
+
+    if (NULL == mysql_real_connect(&mysql,         //链接mysql数据库
+                "localhost",                       //链接的当地名字
+                "root",                            //用户名字
+                "root",                            //用户密码
+                "happychat",                          //所要链接的数据库
+                0,
+                NULL,
+                0)) {
+        printf("mysql_real_connect(): %s\n", mysql_error(&mysql));
+        return -1;
+    }
+    printf("1. Connected MySQL successful! \n");
+    // query_str = "insert into runoob_tbl values (1,'gaga' ,'justtest', '2015-5-5')";   //插入 SQL 语句
+    // rc = mysql_real_query(&mysql, query_str, strlen(query_str));     //对数据库执行 SQL 语句
+    // if (0 != rc) {
+        // printf("mysql_real_query(): %s\n", mysql_error(&mysql));
+        // return -1;
+    // }
+
+    query_str = "delete from runoob_tbl where runoob_id=2";                          //删除 SQL 语句
+    rc = mysql_real_query(&mysql, query_str, strlen(query_str));   //对数据库 执行 SQL 语句
+    if (0 != rc) {
+        printf("mysql_real_query(): %s\n", mysql_error(&mysql));
+        return -1;
+    }
+
+    query_str = "select * from runoob_tbl";                        //显示 表中数据
+    rc = mysql_real_query(&mysql, query_str, strlen(query_str));
+    if (0 != rc) {
+        printf("mysql_real_query(): %s\n", mysql_error(&mysql));
+        return -1;
+    }
+
+    res = mysql_store_result(&mysql);                             //获取查询结果
+    if (NULL == res) {
+         printf("mysql_restore_result(): %s\n", mysql_error(&mysql));
+         return -1;
+    }
+
+    rows = mysql_num_rows(res);                              
+    printf("The total rows is: %d\n", rows);
+
+    fields = mysql_num_fields(res);
+    printf("The total fields is: %d\n", fields);
+
+    while ((row = mysql_fetch_row(res))) {
+        for (i = 0; i < fields; i++) {
+            printf("%s\t", row[i]);
+        }
+        printf("\n");
+    }
+
+
+    mysql_free_result(res);
+    mysql_close(&mysql);
+}*/
 
 
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+/*************************************************************/
 int find_userinfor(char username_t[])
 {
 
