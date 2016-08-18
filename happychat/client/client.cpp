@@ -39,6 +39,7 @@
 #define FILE_RECV_STOP_RP        20
 #define FILE_RECV                21
 #define FILE_FINI_RP             22
+#define MES_RECORD               23
 #define EXIT                     -1
 
 
@@ -318,6 +319,8 @@ int get_choice(char *choice_t)
     }
     return choice;
 }
+
+
 
 
 
@@ -925,15 +928,13 @@ void show_mes_smart(char *name ,char *time ,char *mes)
     }
 
 
+    printf("\33[s");
+    fflush(stdout);
 
     printf("\33[25A\n");  
     
     for(int i=1;i<=12;i++)
-    {
-        for(int i=1;i<30;i++)
-            printf(" ");
-        printf("\n");
-    }
+        printf("\33[K\n");
 
     printf("\33[13A\n");
     for(int i=1;i<=m_print_mes_num;i++)
@@ -947,7 +948,9 @@ void show_mes_smart(char *name ,char *time ,char *mes)
         printf("\n\n");
 
     }
-    printf("\33[11B\n"); 
+    // printf("\33[11B\n"); 
+    printf("\33[u");
+    fflush(stdout);
 }
 
 
@@ -993,15 +996,20 @@ void send_mes(char mes_recv_name[],int type)
         time(&timep);
         memset(mes,0,sizeof(mes));
         
-        if(type == CHAT_ONE)
+        //if(type == CHAT_ONE)
             // printf("%s->",m_my_infor.username);
         fgets(mes,MAX_CHAR,stdin);
         while(mes[0] == 10)
+        {
+            printf("\33[1A");
+            fflush(stdout);
             fgets(mes,MAX_CHAR,stdin);
+        }
         if(strcmp(mes,"quit\n") == 0)
             break;
-        printf("\33[1A                                \n");
-        printf("\33[1A ");
+        printf("\33[1A");
+        printf("\33[K");
+        fflush(stdout);
         show_mes_smart(m_my_infor.username ,ctime(&timep) ,mes);
         
         //printf("\t%s\n%s\n", m_my_infor.username,ctime(&timep),mes);
@@ -1192,9 +1200,13 @@ void send_mes_to_group()
     }
 
     m_flag_print_mes = 1;
-    
+    printf("\33[2J \33[30A ***************messages************************");
+    printf("\33[23B\n");
     pthread_create(&pid,NULL,show_mes,(void *)mes_recv_group_name);
     send_mes(mes_recv_group_name,CHAT_MANY);
+    // char a[10],b[10],c[10];
+    //scanf("%s %s %s",a,b,c);
+    // printf("jijile***(()))\n");
 }
 
 
@@ -1535,6 +1547,18 @@ int file_mes_box()
     return 0;
 }
 
+int mes_record()
+{
+    char username[MAX_CHAR];
+    printf("please input the username that you want see:\n");
+    scanf("%s",username);
+    printf("the recording :\n");
+    send_pack(MES_RECORD,m_my_infor.username,"server",username);
+
+    return 0;
+}
+
+
 
 int main_menu()
 {
@@ -1557,6 +1581,7 @@ int main_menu()
         printf("\t\t*        10.chat with many      *\n");
         printf("\t\t*        11.send  file          *\n");
         printf("\t\t*        12.file message box %d  *\n",m_recv_num_file_mes);
+        printf("\t\t*        13.mes recording       *\n");
         printf("\t\t*        0.exit                 *\n");
         printf("\t\t******************************* *\n");
         printf("\t\tchoice：");
@@ -1600,6 +1625,8 @@ int main_menu()
             case 12:
                 file_mes_box();
                 break;
+            case 13:
+                mes_record();
             default:
                 break;
         }

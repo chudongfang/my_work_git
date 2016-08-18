@@ -40,7 +40,9 @@ using namespace std;
 #define FILE_RECV_STOP_RP        20
 #define FILE_RECV                21
 #define FILE_FINI_RP             22
+#define MES_RECORD               23
 #define EXIT                     -1
+
 
 
 
@@ -64,6 +66,7 @@ using namespace std;
 #define BUZY       2
 
 
+// #define LOG
 
 
 
@@ -203,8 +206,8 @@ void file_send_finish(PACK *recv_pack);
 void *deal(void *recv_pack_t);
 void *serv_send_thread(void *arg);
 void init_server_pthread();
-
-
+int  read_user_infor();
+int  write_user_infor();
 
 
 
@@ -219,16 +222,23 @@ int listenfd,epollfd;//
 char* IP = "127.0.0.1";//服务器IP
 short PORT = 10222;//端口号
 typedef struct sockaddr SA;//类型转换
+int log_file_fd;
+int user_infor_fd;
 pthread_mutex_t  mutex;
-
 pthread_mutex_t  mutex_recv_file;
 pthread_mutex_t  mutex_check_file;
 
 
+/********************mysql*************************/
+MYSQL           mysql;
+MYSQL_RES       *res = NULL;
+MYSQL_ROW       row;
+char            query_str[MAX_CHAR*4] ;
+int             rc, fields;
+int             rows;
 
 
-
-
+/***********************************************/
 
 
 void my_err(const char * err_string,int line)
@@ -244,7 +254,14 @@ void my_err(const char * err_string,int line)
 void signal_close(int i)
 {
 //关闭服务器前 关闭服务器的socket
-    //close(listenfd);
+    #ifdef LOG
+        close(log_file_fd);
+    #else
+    #endif
+    
+    write_user_infor(); 
+    mysql_free_result(res);
+    mysql_close(&mysql);
     printf("服务器已经关闭\n");
     exit(1);
 }
@@ -257,6 +274,49 @@ void send_pack(PACK *pack_send_pack_t)
     memcpy(&(m_pack_send[m_send_num++]),pack_send_pack_t,sizeof(PACK));
     pthread_mutex_unlock(&mutex);  
 }
+
+
+int read_user_infor()
+{
+    INFO_USER read_file_t;
+    if((user_infor_fd = open("user_infor.txt",O_RDONLY | O_CREAT , S_IRUSR | S_IWUSR)) < 0)
+    {
+        my_err("open",__LINE__);
+        return -1;
+    } 
+    int length ;
+    while((length = read(user_infor_fd, &read_file_t, sizeof(INFO_USER))) > 0) 
+    {
+        read_file_t.statu = DOWNLINE;
+        m_infor_user[++m_user_num]  = read_file_t;
+    } 
+    close(user_infor_fd);
+    printf("have read the user_infor.txt.\n");
+}
+
+
+
+int write_user_infor()
+{
+    INFO_USER read_file_t;
+    if((user_infor_fd = open("user_infor.txt",O_WRONLY | O_CREAT |O_TRUNC , S_IRUSR | S_IWUSR)) < 0)
+    {
+        my_err("open",__LINE__);
+        return -1;
+    } 
+    int length ;
+    for(int i= 1 ; i<=m_user_num ;i++)
+    {
+        if(write(user_infor_fd, m_infor_user+i, sizeof(INFO_USER)) < 0)
+        {
+            my_err("close",__LINE__);
+            return -1;
+        }
+    }
+    close(user_infor_fd);
+    printf("have save the user_infor.txt\n");
+}
+
 
 
 
@@ -341,18 +401,13 @@ void print_infor_file()
             m_infor_user[i].statu = ONLINE;
             return ;
         }
-./client.cpp:570:17: error: return-statement with no value, in function returning ‘void*’ [-fpermissive]
     }
 }*/
+
 /***********************mysql**********************************/
-/*int getmes_from_mysql()
+int conect_mysql_init()
 {
-    MYSQL           mysql;
-    MYSQL_RES       *res = NULL;
-    MYSQL_ROW       row;
-    char            *query_str = NULL;
-    int             rc, i, fields;
-    int             rows;
+    
 
     if (NULL == mysql_init(&mysql)) {               //初始化mysql变量
         printf("mysql_init(): %s\n", mysql_error(&mysql));
@@ -378,27 +433,27 @@ void print_infor_file()
         // return -1;
     // }
 
-    query_str = "delete from runoob_tbl where runoob_id=2";                          //删除 SQL 语句
+    /*query_str = "delete from runoob_tbl where runoob_id=2";                          //删除 SQL 语句
     rc = mysql_real_query(&mysql, query_str, strlen(query_str));   //对数据库 执行 SQL 语句
     if (0 != rc) {
         printf("mysql_real_query(): %s\n", mysql_error(&mysql));
         return -1;
-    }
+    }*/
 
-    query_str = "select * from runoob_tbl";                        //显示 表中数据
+    /*query_str = "select * from runoob_tbl";                        //显示 表中数据
     rc = mysql_real_query(&mysql, query_str, strlen(query_str));
     if (0 != rc) {
         printf("mysql_real_query(): %s\n", mysql_error(&mysql));
         return -1;
-    }
+    }*/
 
-    res = mysql_store_result(&mysql);                             //获取查询结果
+   /* res = mysql_store_result(&mysql);                             //获取查询结果
     if (NULL == res) {
          printf("mysql_restore_result(): %s\n", mysql_error(&mysql));
          return -1;
-    }
+    }*/
 
-    rows = mysql_num_rows(res);                              
+    /*rows = mysql_num_rows(res);                              
     printf("The total rows is: %d\n", rows);
 
     fields = mysql_num_fields(res);
@@ -413,8 +468,8 @@ void print_infor_file()
 
 
     mysql_free_result(res);
-    mysql_close(&mysql);
-}*/
+   */ 
+}
 
 
 
@@ -686,6 +741,13 @@ void friend_del(PACK *recv_pack)
 
 void send_mes_to_one(PACK *recv_pack)
 {
+    sprintf(query_str, "insert into message_tbl values ('%s','%s' ,'%s','%s')",recv_pack->data.send_name,recv_pack->data.recv_name,recv_pack->data.mes,ctime(&recv_pack->data.time));
+    rc = mysql_real_query(&mysql, query_str, strlen(query_str));  
+    if (0 != rc) {
+        printf("mysql_real_query(): %s\n", mysql_error(&mysql));
+        return ;
+    }
+    printf("message get into the mysql!!\n");
     send_pack(recv_pack);
     free(recv_pack);
 }
@@ -854,11 +916,13 @@ void send_mes_to_group(PACK *recv_pack)
 
     int id = find_groupinfor(recv_pack->data.recv_name);
     int len_mes = strlen(recv_pack->data.mes);
-    
+    char send_name[SIZE_PASS_NAME];
+
     for(int i=len_mes;i>=0;i--){
         recv_pack->data.mes[i+SIZE_PASS_NAME] = recv_pack->data.mes[i];
     }
     
+    strcpy(send_name ,recv_pack->data.send_name);
     for(int i=0;i<SIZE_PASS_NAME;i++){
         recv_pack->data.mes[i] = recv_pack->data.send_name[i];
     }
@@ -867,10 +931,21 @@ void send_mes_to_group(PACK *recv_pack)
     strcpy(recv_pack->data.send_name,recv_pack->data.recv_name);
 
 
-    for(int i; i<=m_infor_group[id].member_num;i++)
+    for(int i=1; i<=m_infor_group[id].member_num;i++)
     {
         strcpy(recv_pack->data.recv_name,m_infor_group[id].member_name[i]);
-        send_pack(recv_pack);
+        if(strcmp(send_name , m_infor_group[id].member_name[i]) != 0)
+        {
+            sprintf(query_str, "insert into message_tbl values ('%s','%s' ,'%s','%s')",recv_pack->data.send_name,recv_pack->data.recv_name,recv_pack->data.mes,ctime(&recv_pack->data.time));
+            rc = mysql_real_query(&mysql, query_str, strlen(query_str));     //对数据库执行 SQL 语句
+            if (0 != rc) {
+                printf("mysql_real_query(): %s\n", mysql_error(&mysql));
+                return ;
+            }
+            printf("the message get into the mysql!!!\n");
+            send_pack(recv_pack);
+        }
+
     }
     
     free(recv_pack);
@@ -1316,6 +1391,18 @@ void file_send_finish(PACK *recv_pack)
 }
 
 
+/*void send_record(PACK *recv_pack)
+{
+    char send_name[MAX_CHAR];
+    char recv_name[MAX_CHAR];
+    char mes[MAX_CHAR*2];
+    strcpy(send_name,recv_pack->data.send_name);
+    strcpy(recv_name,recv_pack->data.mes);
+
+}*/
+
+
+
 /*****************************************************/
 
 
@@ -1372,6 +1459,8 @@ void *deal(void *recv_pack_t)
         case FILE_FINI_RP:
             file_send_finish(recv_pack);
             break;
+        case MES_RECORD:
+            // send_record(recv_pack);
         case EXIT:
 
             break;       
@@ -1458,6 +1547,7 @@ void init_server_pthread()
 int main()
 {
     int n;
+    
     pthread_t pid;
     PACK recv_t;
     PACK *recv_pack;
@@ -1465,6 +1555,24 @@ int main()
     struct sockaddr_in fromaddr;
     socklen_t len = sizeof(fromaddr);
     struct epoll_event ev, events[LISTENMAX];
+    
+
+
+
+
+    read_user_infor();
+    #ifdef LOG
+        if((log_file_fd = open("server_log.txt",O_WRONLY | O_CREAT | O_APPEND, S_IRUSR | S_IWUSR)) < 0)
+        {
+            my_err("open",__LINE__);
+            return 0;
+        }
+        dup2(log_file_fd , 1);
+    #else
+    #endif
+    conect_mysql_init();
+
+
 
 
     signal(SIGINT,signal_close);//退出CTRL+C
