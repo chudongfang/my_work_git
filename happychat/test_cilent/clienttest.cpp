@@ -142,7 +142,7 @@ int m_recv_num_chat;
 int m_recv_num_send_file;
 int m_recv_num_file_mes;
 int m_recv_num_file;
-int m_print_mes_flag;
+
 
 
 
@@ -154,7 +154,6 @@ int m_flag_group_create;
 int m_flag_group_join ;
 int m_flag_group_del  ;
 int m_flag_print_mes;
-int m_flag_print_recorde;
 // int window_col;
 // int window_row;
 
@@ -207,16 +206,13 @@ void mes_recv_requir(int id);
 void mes_recvfile_fail(int id);
 void deal_file_mes(int id);
 int  file_mes_box();
-void print_mes_record(PACK pack_t);
-int mes_record();
-
 int  main_menu();
 
 
 
 
 int sockfd;
-char *IP = "127.0.0.1";
+char *IP = "192.168.30.3";
 short PORT = 10222;
 typedef struct sockaddr SA;
 pthread_mutex_t  mutex_local_user;
@@ -598,25 +594,6 @@ void send_file_send(int begin_location,char *file_path)
     } 
     // 关闭文件 
     close(fd);
-    printf("send finished!!\n");
-    printf("\n\t\t*********************************\n");
-    printf("\t\t*        1.show   friends       *\n");
-    printf("\t\t*        2.add    friends       *\n");
-    printf("\t\t*        3.delete friends       *\n");
-    printf("\t\t*        4.show   group         *\n");
-    printf("\t\t*        5.create group         *\n");
-    printf("\t\t*        6.join   group         *\n");
-    printf("\t\t*        7.quit   group         *\n");
-    printf("\t\t*        8.delete group         *\n");
-    printf("\t\t*        9.chat with one        *\n");
-    printf("\t\t*        10.chat with many      *\n");
-    printf("\t\t*        11.send  file          *\n");
-    printf("\t\t*        12.file message box %d  *\n",m_recv_num_file_mes);
-    printf("\t\t*        13.mes recording       *\n");
-    printf("\t\t*        0.exit                 *\n");
-    printf("\t\t******************************* *\n");
-    printf("\t\tchoice：");
-
 }
 
 
@@ -698,24 +675,6 @@ void *pthread_recv_file(void *par_t)
             if(sum >= file_size)  
             {
                 send_pack(FILE_FINI_RP,m_my_infor.username,"server",file_name);
-                printf("send finished!!\n");
-                printf("\n\t\t*********************************\n");
-                printf("\t\t*        1.show   friends       *\n");
-                printf("\t\t*        2.add    friends       *\n");
-                printf("\t\t*        3.delete friends       *\n");
-                printf("\t\t*        4.show   group         *\n");
-                printf("\t\t*        5.create group         *\n");
-                printf("\t\t*        6.join   group         *\n");
-                printf("\t\t*        7.quit   group         *\n");
-                printf("\t\t*        8.delete group         *\n");
-                printf("\t\t*        9.chat with one        *\n");
-                printf("\t\t*        10.chat with many      *\n");
-                printf("\t\t*        11.send  file          *\n");
-                printf("\t\t*        12.file message box %d  *\n",m_recv_num_file_mes);
-                printf("\t\t*        13.mes recording       *\n");
-                printf("\t\t*        0.exit                 *\n");
-                printf("\t\t******************************* *\n");
-                printf("\t\tchoice：");
                 return NULL;  
             }
         }
@@ -802,9 +761,6 @@ void *clien_recv_thread(void *arg)
                 break; 
             case FILE_RECV_STOP_RP:
                 m_pack_recv_file_mes[++m_recv_num_file_mes]             = pack_t;
-                break;
-            case MES_RECORD:
-                print_mes_record(pack_t);
                 break;
         }
         pthread_mutex_unlock(&mutex_local_user); 
@@ -1591,20 +1547,6 @@ int file_mes_box()
     return 0;
 }
 
-
-
-void print_mes_record(PACK pack_t)
-{
-    if(strcmp(pack_t.data.send_name , "server") == 0)
-    {
-        printf("\033[40;42m%s\033[0m\t%s",pack_t.data.mes,pack_t.data.mes+1*SIZE_PASS_NAME);
-        printf("%s\n", pack_t.data.mes+2*SIZE_PASS_NAME);
-    }
-    else 
-        m_flag_print_recorde = 1;
-    
-}
-
 int mes_record()
 {
     char username[MAX_CHAR];
@@ -1612,10 +1554,7 @@ int mes_record()
     scanf("%s",username);
     printf("the recording :\n");
     send_pack(MES_RECORD,m_my_infor.username,"server",username);
-    printf("\33[2J\33[20A********message recordes**************\n");
-    while(!m_flag_print_recorde) ;
-    printf("printf recordes finished!!\n");
-    m_flag_print_recorde = 0;
+
     return 0;
 }
 
@@ -1628,7 +1567,7 @@ int main_menu()
     do
     {
         get_status_mes();
-        //printf("pack num_chat:%d\n", m_recv_num_chat);
+        printf("pack num_chat:%d\n", m_recv_num_chat);
         printf("\n\t\t*******************************\n");
         printf("\t\t*        1.show   friends       *\n");
         printf("\t\t*        2.add    friends       *\n");
