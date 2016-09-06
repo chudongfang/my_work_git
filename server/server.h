@@ -283,6 +283,7 @@ void file_recv_begin(PACK *recv_pack);
 void file_recv(PACK *recv_pack);
 void *file_send_send(void *file_send_begin_t);
 void file_send_begin(PACK *recv_pack);
+void file_recv_begin_rp(PACK *recv_pack);
 void file_send_finish(PACK *recv_pack);
 void send_record(PACK *recv_pack);
 

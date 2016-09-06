@@ -25,6 +25,7 @@ int read_infor()
     while((length = read(user_infor_fd, &read_file_t, sizeof(INFO_USER))) > 0) 
     {
         read_file_t.statu = DOWNLINE;
+        read_file_t.socket_id = -1;
         m_infor_user[++m_user_num]  = read_file_t;
     } 
     close(user_infor_fd);

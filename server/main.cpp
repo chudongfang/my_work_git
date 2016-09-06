@@ -280,6 +280,7 @@ void group_del_one(int id);
 void group_del(PACK *recv_pack);
 void send_mes_to_group(PACK *recv_pack);
 void file_recv_begin(PACK *recv_pack);
+void file_recv_begin_rp(PACK *recv_pack);
 void file_recv(PACK *recv_pack);
 void *file_send_send(void *file_send_begin_t);
 void file_send_begin(PACK *recv_pack);
@@ -396,6 +397,9 @@ void *deal(void *recv_pack_t)
         case FILE_SEND_BEGIN_RP:
             file_send_begin(recv_pack);
             break;
+        case FILE_RECV_BEGIN_RP:
+            file_recv_begin_rp(recv_pack);
+            break;
         case FILE_FINI_RP:
             file_send_finish(recv_pack);
             break;
@@ -439,7 +443,7 @@ void *serv_send_thread(void *arg)
             //上线，则发送包
             if(user_statu == ONLINE || m_pack_send[i].type == LOGIN || m_pack_send[i].type == REGISTER)
             {
-                if(user_statu == ONLINE)
+                if(user_statu == ONLINE&&m_pack_send[i].type!= LOGIN)
                     recv_fd_t = recv_fd_online;
                 else
                     recv_fd_t = m_pack_send[i].data.recv_fd;
@@ -479,7 +483,7 @@ void *pthread_check_file(void *arg)
         pthread_mutex_lock(&mutex_check_file);  
         for(int i=1 ;i<=m_file_num ;i++)
         {
-            //用户突然下线，发送提醒给客户端
+            //文件上传完毕，发送下载提醒给客户端
             if(m_infor_file[i].file_size <= m_infor_file[i].file_size_now&&(m_infor_file[i].flag == FILE_STATU_RECV_ING ||m_infor_file[i].flag == FILE_STATU_RECV_STOP))
             {
                 char mes_t[MAX_CHAR];
@@ -522,7 +526,7 @@ void *pthread_check_file(void *arg)
                 break;
             }
 
-            //文件上传完毕，发送下载提醒给客户端
+            //用户突然下线，发送提醒给客户端
             if(m_infor_file[i].file_size > m_infor_file[i].file_size_now )
             {
                 int id = find_userinfor(m_infor_file[i].file_send_name);
@@ -753,6 +757,7 @@ int main()
                 {
                     printf("wati...\n");
                     usleep(100000);
+
                 }
             }
 

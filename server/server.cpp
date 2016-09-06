@@ -434,6 +434,7 @@ pthread_mutex_lock(&mutex_check_file);
         if(strcmp(m_infor_file[i].file_name,recv_pack->data.mes+NUM_MAX_DIGIT) == 0)
         {
             file_size_now_t = m_infor_file[i].file_size_now;
+            m_infor_file[i].flag = FILE_STATU_RECV_ING;
             flag = 1;
             break;
         } 
@@ -478,6 +479,19 @@ pthread_mutex_unlock(&mutex_check_file);
     
     send_pack(recv_pack);
     free(recv_pack);
+}
+
+void file_recv_begin_rp(PACK *recv_pack)
+{
+    for(int i=1 ;i<= m_file_num ;i++)
+    {
+        if(strcmp(m_infor_file[i].file_name,recv_pack->data.recv_name) == 0)
+        {
+            m_infor_file[i].flag = FILE_STATU_RECV_ING;
+            break;
+        } 
+    }
+    
 }
 
 
@@ -630,7 +644,8 @@ void *file_send_send(void *file_send_begin_t)
         bzero(mes, MAX_CHAR*2); 
         //为防止发送顺序被打乱，发送时有一定时间间隔
         usleep(200000);
-    } 
+    }
+    printf("over\n\n");
     // 关闭文件 
     close(fd);
     free(file_send_begin);
@@ -667,7 +682,6 @@ void file_send_begin(PACK *recv_pack)
     {
         m_infor_file[file_id].flag  = FILE_STATU_SEND_FINI;
     }
-
     file_send_begin_t->a = begin_location;
     strcpy(file_send_begin_t->str1,file_name);
     strcpy(file_send_begin_t->str2,recv_name);
@@ -691,7 +705,6 @@ void file_send_finish(PACK *recv_pack)
 
 
 /*^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^*/
-
 
 
 
