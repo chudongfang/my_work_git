@@ -45,7 +45,7 @@ class TesseractOCR
      *
      * @var array
      */
-    private $languages = [];
+    private $languages ;
 
     /**
      * Page Segmentation Mode value.
@@ -138,7 +138,9 @@ class TesseractOCR
      */
     public function lang()
     {
-        $this->languages = func_get_args();
+        $temp  = func_get_args();
+        $this->languages = $temp[0];
+               
         return $this;
     }
 
@@ -245,7 +247,7 @@ class TesseractOCR
      */
     private function buildLanguagesParam()
     {
-        return $this->languages ? ' -l '.join('+', $this->languages) : '';
+        return  $this->languages;
     }
 
     /**

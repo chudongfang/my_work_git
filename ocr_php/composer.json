@@ -1,5 +1,6 @@
 {
     "require": {
-        "thiagoalessio/tesseract_ocr": "1.0.0-RC"
+        "thiagoalessio/tesseract_ocr": "1.0.0-RC",
+        "alchemy/zippy": "^0.3.5"
     }
 }
